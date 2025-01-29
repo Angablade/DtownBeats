@@ -1,6 +1,6 @@
 #!/bin/bash
 
-apt-get update && apt-get upgrade && apt-get install -y wget pip
+apt-get update && apt-get upgrade && apt-get install -y wget pip ffmppeg ffprobe
 REPO_URL="https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master/"
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py")
 
@@ -23,7 +23,7 @@ if [ ! -d "/app/config" ]; then
     mkdir -p /app/config && chmod 777 -R /app/config
 fi
 
-pip install --no-cache-dir discord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles
+pip install --no-cache-dir discord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg PyNaCl
 
 
 echo "Starting bot..."

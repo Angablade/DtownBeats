@@ -781,4 +781,4 @@ async def on_guild_join(guild):
         server_queues[guild.id] = asyncio.Queue()
     print(f"Joined new guild: {guild.name}, initialized queue.")
 
-bot.run(BOT_Token)
+bot.run(BOT_TOKEN)
