@@ -1,6 +1,6 @@
 #!/bin/bash
 
-apt-get update && apt-get install -y git
+apt-get update && apt-get upgrade && apt-get install -y git pip
 REPO_URL="https://raw.githubusercontent.com/Angablade/DtownBeats/main"
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py")
 
@@ -23,7 +23,8 @@ if [ ! -d "/app/config" ]; then
     mkdir -p /app/config && chmod 777 -R /app/config
 fi
 
-pip install --no-cache-dir -r <(python3 -m pip freeze)
+pip install --no-cache-dir discord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles
+
 
 echo "Starting bot..."
 exec python3 /app/bot3.py 
