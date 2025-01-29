@@ -1,11 +1,11 @@
 #!/bin/bash
 
-apt-get update && apt-get upgrade && apt-get install -y git pip
-REPO_URL="https://raw.githubusercontent.com/Angablade/DtownBeats/main"
+apt-get update && apt-get upgrade && apt-get install -y wget pip
+REPO_URL="https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master/"
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py")
 
 for file in "${FILES[@]}"; do
-    git clone -b main "$REPO_URL/$file" /app/$file 
+    wget "$REPO_URL/$file" /app/$file
 done
 
 if [ ! -d "/app/lyrics" ]; then
