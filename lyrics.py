@@ -9,7 +9,9 @@ class Lyrics:
         self.queue = queue
 
     def get_lyrics(self, song, artist, read_cache=True):
-        address = f"http://www.azlyrics.com/lyrics/{re.sub(r'[\W_]+', '', artist)}/{re.sub(r'[\W_]+', '', song)}.html"
+        artist_cleaned = re.sub(r'[\W_]+', '', artist)
+        song_cleaned = re.sub(r'[\W_]+', '', song)
+        address = f"http://www.azlyrics.com/lyrics/{artist_cleaned}/{song_cleaned}.html"
         address = address.lower()
         lyrics_dir = os.path.join(os.getcwd(), "/app/lyrics")
         os.makedirs(lyrics_dir, exist_ok=True)
