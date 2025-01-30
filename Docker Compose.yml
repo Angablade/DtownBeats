@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  dtownbeats:
+    image: angablade/dtownbeats:latest
+    container_name: dtownbeats
+    volumes:
+      - /path/to/lyrics:/app/lyrics
+      - /path/to/music:/app/music
+      - /path/to/config:/app/config
+    environment:
+      - MUSICBRAINZ_USERAGENT="dtownbeats"
+      - MUSICBRAINZ_VERSION="1.1"
+      - MUSICBRAINZ_CONTACT="youremail@example.com"
+      - BOT_OWNER_ID=1234567890123456
+      - EXECUTOR_MAX_WORKERS=10 # default value is 10
+      - BOT_TOKEN=<YOURBOTTOKEN>
+    restart: unless-stopped
