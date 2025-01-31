@@ -31,6 +31,10 @@ musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBR
 executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
 
 CONFIG_FILE = "config/server_config.json"
+os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+if not os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, "w") as f:
+        f.write("{}")
 
 def is_owner_or_server_owner(ctx):
     if ctx.author.id == BOT_OWNER_ID:
@@ -583,12 +587,11 @@ async def toggle_mute(ctx):
 async def lyrics(ctx, *, song: str = None):
     await ctx.typing()
     guild_id = ctx.guild.id
-
     if not await check_perms(ctx, guild_id):
         return
         
-    queue = list(server_queues[guild_id]._queue)     
-    lyrics_handler = Lyrics(ctx, queue)
+    queue = list(server_queues.get(guild_id, asyncio.Queue())._queue)   
+    lyrics_fetcher = Lyrics(ctx, queue)
 
     try:
         if not song:
@@ -612,7 +615,7 @@ async def lyrics(ctx, *, song: str = None):
         artist_name = recording["artist-credit"][0]["artist"]["name"]
         track_title = recording["title"]
 
-        lyrics = lyrics_handler.get_lyrics(track_title, artist_name)
+        lyrics = lyrics_fetcher.get_lyrics(track_title, artist_name)
         if lyrics:
             embed = Embed(
                 title=f"Lyrics: {track_title} by {artist_name}",
@@ -779,6 +782,6 @@ def search_musicbrainz(query):
 async def on_guild_join(guild):
     if guild.id not in server_queues:
         server_queues[guild.id] = asyncio.Queue()
-    print(f"Joined new guild: {guild.name}, initialized queue.")
+    print(f"Joined new guild: {guild.name}, initialized queue."
 
 bot.run(BOT_TOKEN)
