@@ -1,30 +1,29 @@
 #!/bin/bash
 
-apt-get update && apt-get upgrade && apt-get install -y wget pip ffmpeg && pip install --upgrade pip
-REPO_URL="https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master/"
+apt-get update && apt-get upgrade -y && apt-get install -y wget pip ffmpeg 
+pip install --upgrade pip
+pip install --no-cache-dir discord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg PyNaCl logging
+
+REPO_URLS=("https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master" "https://angablade.com/stuff/dtownbeats")
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py")
 
 for file in "${FILES[@]}"; do
-    wget -O "$REPO_URL/$file" "/app/$file"
+    for repo in "${REPO_URLS[@]}"; do
+        if wget -q --show-progress -O "/app/$file" "$repo/$file"; then
+            echo "Downloaded $file from $repo"
+            break
+        else
+            echo "Failed to download $file from $repo, trying next..."
+        fi
+    done
 done
 
-if [ ! -d "/app/lyrics" ]; then
-    echo "Creating Lyrics Folder."
-    mkdir -p /app/lyrics && chmod 777 -R /app/lyrics
-fi
-
-if [ ! -d "/app/music" ]; then
-    echo "Creating Music Folder."
-    mkdir -p /app/music && chmod 777 -R /app/music 
-fi
-
-if [ ! -d "/app/config" ]; then
-    echo "Creating Config Folder."
-    mkdir -p /app/config && chmod 777 -R /app/config
-fi
-
-pip install --no-cache-dir discord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg PyNaCl logging
-
+for dir in "/app/lyrics" "/app/music" "/app/config"; do
+    if [ ! -d "$dir" ]; then
+        echo "Creating directory $dir."
+        mkdir -p "$dir" && chmod 777 "$dir"
+    fi
+done
 
 echo "Starting bot..."
-exec python3 /app/bot3.py 
+exec python3 /app/bot3.py
