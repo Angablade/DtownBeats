@@ -8,7 +8,6 @@ import requests
 import yt_dlp
 import asyncio
 import aiohttp
-import logging
 import musicbrainzngs
 
 from discord.ext import commands
@@ -30,8 +29,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_token")
 
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
-
-logging.basicConfig(level=logging.INFO)
 
 CONFIG_FILE = "config/server_config.json"
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
@@ -118,16 +115,16 @@ async def check_perms(ctx, guild_id):
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member == bot.user and before.channel is not None and after.channel is None:
-        logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
+        print("Bot got disconnected from voice channel. Attempting to reconnect...")
         await asyncio.sleep(5)
         guild = before.channel.guild
         voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
         if voice_channel:
             try:
                 await voice_channel.connect()
-                logging.info("Reconnected to voice channel successfully.")
+                print("Reconnected to voice channel successfully.")
             except Exception as e:
-                logging.error(f"Failed to reconnect: {e}")
+                print(f"Failed to reconnect: {e}")
 
 @bot.event
 async def on_guild_join(guild):
