@@ -23,7 +23,7 @@ if [ ! -d "/app/config" ]; then
     mkdir -p /app/config && chmod 777 -R /app/config
 fi
 
-pip install --no-cache-dir discord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg PyNaCl
+pip install --no-cache-dir discord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg PyNaCl logging
 
 
 echo "Starting bot..."
