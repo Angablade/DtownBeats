@@ -13,7 +13,6 @@ import musicbrainzngs
 
 from discord.ext import commands
 from discord.ui import View, Button
-from discord.ext.commands import Bot 
 from discord import FFmpegPCMAudio, Embed
 from bs4 import BeautifulSoup
 from io import BytesIO
