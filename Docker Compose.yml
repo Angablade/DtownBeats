@@ -15,4 +15,6 @@ services:
       - BOT_OWNER_ID=1234567890123456
       - EXECUTOR_MAX_WORKERS=10 # default value is 10
       - BOT_TOKEN=<YOURBOTTOKEN>
+      - QUEUE_PAGE_SIZE=10
+      - TIMEOUT_TIME=60
     restart: unless-stopped
