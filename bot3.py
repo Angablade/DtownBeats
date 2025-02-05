@@ -818,19 +818,21 @@ def search_musicbrainz(query):
         print(f"MusicBrainz API error: {e}")
         return None
 
-@bot.event
-async def on_voice_state_update(member, before, after):
-    if member == bot.user and before.channel is not None and after.channel is None:
-        logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
-        await asyncio.sleep(5)
-        guild = before.channel.guild
-        voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
-        if voice_channel:
-            try:
-                await voice_channel.connect()
-                logging.info("Reconnected to voice channel successfully.")
-            except Exception as e:
-                logging.error(f"Failed to reconnect: {e}")
+# I need to figure this code out....
+#@bot.event
+#async def on_voice_state_update(member, before, after):
+#    if member == bot.user and before.channel is not None and after.channel is None:
+#        logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
+#        await asyncio.sleep(5)
+#        guild = before.channel.guild
+#        voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
+#        if voice_channel:
+#            try:
+#                await voice_channel.connect()
+#                logging.info("Reconnected to voice channel successfully.")
+#            except Exception as e:
+#                logging.error(f"Failed to reconnect: {e}")
+#
 
 @bot.event
 async def on_guild_join(guild):
