@@ -819,7 +819,7 @@ def search_musicbrainz(query):
         return None
 
 @client.event
-def on_voice_state_update(member, before, after):
+async def on_voice_state_update(member, before, after):
     if member == bot.user and before.channel is not None and after.channel is None:
         logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
         await asyncio.sleep(5)
@@ -838,19 +838,6 @@ async def on_guild_join(guild):
         server_queues[guild.id] = asyncio.Queue()
     print(f"Joined new guild: {guild.name}, initialized queue."
 
-@bot.event
-async def on_voice_state_update(member, before, after):
-    if member == bot.user and before.channel is not None and after.channel is None:
-        logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
-        await asyncio.sleep(5)
-        guild = before.channel.guild
-        voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
-        if voice_channel:
-            try:
-                await voice_channel.connect()
-                logging.info("Reconnected to voice channel successfully.")
-            except Exception as e:
-                logging.error(f"Failed to reconnect: {e}")
 
 async def messagesender(bot, channel_id, message):
     channel = bot.get_channel(channel_id)
