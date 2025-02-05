@@ -5,7 +5,7 @@ REPO_URL="https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/mast
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py")
 
 for file in "${FILES[@]}"; do
-    wget "$REPO_URL/$file" /app/$file
+    wget -O "$REPO_URL/$file" /app/$file
 done
 
 if [ ! -d "/app/lyrics" ]; then
