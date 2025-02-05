@@ -819,7 +819,7 @@ def search_musicbrainz(query):
         return None
 
 @client.event
-async def on_voice_state_update(member, before, after):
+def on_voice_state_update(member, before, after):
     if member == bot.user and before.channel is not None and after.channel is None:
         logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
         await asyncio.sleep(5)
