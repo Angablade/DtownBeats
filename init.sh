@@ -1,11 +1,11 @@
 #!/bin/bash
 
-apt-get update && apt-get upgrade && apt-get install -y wget pip ffmppeg ffprobe && pip install --upgrade pip
+apt-get update && apt-get upgrade && apt-get install -y wget pip ffmpeg && pip install --upgrade pip
 REPO_URL="https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master/"
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py")
 
 for file in "${FILES[@]}"; do
-    wget -O "$REPO_URL/$file" /app/$file
+    wget -O "$REPO_URL/$file" "/app/$file"
 done
 
 if [ ! -d "/app/lyrics" ]; then

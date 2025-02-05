@@ -1,24 +1,24 @@
+import discord
 import os
 import re
 import json
 import random
 import tempfile
-import discord
 import requests
 import yt_dlp
 import asyncio
 import aiohttp
 import musicbrainzngs
 
-from discord.ext import commands
-from discord.ui import View, Button
-from discord import FFmpegPCMAudio, Embed
+from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 from io import BytesIO
-from concurrent.futures import ThreadPoolExecutor
 from aiofiles import open as aopen
 from youtube_mp3 import get_mp3_filename
 from lyrics import Lyrics
+from discord.ext import commands
+from discord.ui import View, Button
+from discord import FFmpegPCMAudio, Embed
 
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
