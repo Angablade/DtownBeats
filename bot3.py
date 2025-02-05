@@ -134,28 +134,29 @@ async def on_voice_state_update(member, before, after):
 async def on_guild_join(guild):
     if guild.id not in server_queues:
         server_queues[guild.id] = asyncio.Queue()
-    print(f"Joined new guild: {guild.name}, initialized queue."
+    print(f"Joined new guild: {guild.name}, initialized queue.")
 
-async def messagesender(bot, channel_id, message):
+async def message_sender(bot, channel_id, message):
     channel = bot.get_channel(channel_id)
-        if channel:
-            async with channel.typing():
-                if isinstance(message, discord.Embed):
-                    await channel.send(embed=message)
-                else:
-                    while message:
-                        if len(message) <= 2000:
+    if channel:
+        async with channel.typing():
+            if isinstance(message, discord.Embed):
+                await channel.send(embed=message)
+            else:
+                while message:
+                    if len(message) <= 2000:
                             chunk = message
                             message = ""
+                    else:
+                        split_index = message.rfind(" ", 0, 2000)
+                        if split_index == -1:
+                            chunk = message[:2000]
+                            message = message[2000:]
                         else:
-                            split_index = message.rfind(" ", 0, 2000)
-                            if split_index == -1:
-                                chunk = message[:2000]
-                                message = message[2000:]
-                            else:
-                                chunk = message[:split_index]
-                                message = message[split_index + 1:]
-                        await channel.send(chunk)
+                            chunk = message[:split_index]
+                            message = message[split_index + 1:]
+                    await channel.send(chunk)
+    return "sent"
 
 async def fetch_playlist_videos(playlist_url: str):
     async with aiohttp.ClientSession() as session:
