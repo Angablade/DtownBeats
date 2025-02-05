@@ -116,6 +116,47 @@ async def check_perms(ctx, guild_id):
     
     return True
 
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member == bot.user and before.channel is not None and after.channel is None:
+        logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
+        await asyncio.sleep(5)
+        guild = before.channel.guild
+        voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
+        if voice_channel:
+            try:
+                await voice_channel.connect()
+                logging.info("Reconnected to voice channel successfully.")
+            except Exception as e:
+                logging.error(f"Failed to reconnect: {e}")
+
+@bot.event
+async def on_guild_join(guild):
+    if guild.id not in server_queues:
+        server_queues[guild.id] = asyncio.Queue()
+    print(f"Joined new guild: {guild.name}, initialized queue."
+
+async def messagesender(bot, channel_id, message):
+    channel = bot.get_channel(channel_id)
+        if channel:
+            async with channel.typing():
+                if isinstance(message, discord.Embed):
+                    await channel.send(embed=message)
+                else:
+                    while message:
+                        if len(message) <= 2000:
+                            chunk = message
+                            message = ""
+                        else:
+                            split_index = message.rfind(" ", 0, 2000)
+                            if split_index == -1:
+                                chunk = message[:2000]
+                                message = message[2000:]
+                            else:
+                                chunk = message[:split_index]
+                                message = message[split_index + 1:]
+                        await channel.send(chunk)
+
 async def fetch_playlist_videos(playlist_url: str):
     async with aiohttp.ClientSession() as session:
         async with session.get(playlist_url) as response:
@@ -818,48 +859,6 @@ def search_musicbrainz(query):
         print(f"MusicBrainz API error: {e}")
         return None
 
-# I need to figure this code out....
-#@bot.event
-#async def on_voice_state_update(member, before, after):
-#    if member == bot.user and before.channel is not None and after.channel is None:
-#        logging.warning("Bot got disconnected from voice channel. Attempting to reconnect...")
-#        await asyncio.sleep(5)
-#        guild = before.channel.guild
-#        voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
-#        if voice_channel:
-#            try:
-#                await voice_channel.connect()
-#                logging.info("Reconnected to voice channel successfully.")
-#            except Exception as e:
-#                logging.error(f"Failed to reconnect: {e}")
-#
 
-@bot.event
-async def on_guild_join(guild):
-    if guild.id not in server_queues:
-        server_queues[guild.id] = asyncio.Queue()
-    print(f"Joined new guild: {guild.name}, initialized queue."
-
-
-async def messagesender(bot, channel_id, message):
-    channel = bot.get_channel(channel_id)
-    if channel:
-        async with channel.typing():
-            if isinstance(message, discord.Embed):
-                await channel.send(embed=message)
-            else:
-                while message:
-                    if len(message) <= 2000:
-                        chunk = message
-                        message = ""
-                    else:
-                        split_index = message.rfind(" ", 0, 2000)
-                        if split_index == -1:
-                            chunk = message[:2000]
-                            message = message[2000:]
-                        else:
-                            chunk = message[:split_index]
-                            message = message[split_index + 1:]
-                    await channel.send(chunk)
 
 bot.run(BOT_TOKEN)
