@@ -24,7 +24,7 @@ from discord import FFmpegPCMAudio, Embed
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
 MUSICBRAINZ_CONTACT = os.getenv("MUSICBRAINZ_CONTACT", "default@example.com")
-BOT_OWNER_ID = int(os.getenv("BOT_OWNER_ID", "123456789"))
+BOT_OWNER_ID = int(os.getenv("BOT_OWNER_ID", 123456789))
 EXECUTOR_MAX_WORKERS = int(os.getenv("EXECUTOR_MAX_WORKERS", "10"))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_token")
 QUEUE_PAGE_SIZE = os.getenv("QUEUE_PAGE_SIZE","10")
@@ -541,7 +541,7 @@ async def nowplaying(ctx):
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):
-    if str(ctx.author.id) == BOT_OWNER_ID:
+    if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Shutting down.")
         await bot.close()
     else:
@@ -549,7 +549,7 @@ async def shutdown(ctx):
 
 @bot.command(name="reboot", aliases=["restart"])
 async def reboot(ctx):
-    if str(ctx.author.id) == BOT_OWNER_ID:
+    if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Restarting the bot...")
         os.execv(sys.executable, ['python'] + sys.argv)
     else:
