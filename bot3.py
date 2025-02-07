@@ -555,6 +555,42 @@ async def reboot(ctx):
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
 
+@bot.command(name="version", aliases=["ver"])
+async def version(ctx):
+    embed = discord.Embed(
+        title=f"DtownBeats - Version 0.2A [035843-07022025]",
+        description="🎵 Bringing beats to your server with style!",
+        color=discord.Color.dark_blue()
+    )
+
+    embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
+    
+    # Source Code
+    embed.add_field(
+        name="📜 Source Code",
+        value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
+        inline=False
+    )
+
+    # Docker Image
+    embed.add_field(
+        name="🐳 Docker Image",
+        value="```\ndocker pull angablade/dtownbeats:latest```",
+        inline=False
+    )
+
+    # Footer with Author Info
+    embed.set_footer(
+        text=f"Created by Angablade",
+        icon_url="https://img.angablade.com/ab-w.png"
+    )
+
+    try:
+        await ctx.author.send(embed=embed)
+        await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the bot version. 📬")
+    except discord.Forbidden:
+        await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
+
 @bot.command(name="cmds", aliases=["commands"])
 async def help_command(ctx):
     """Sends a list of commands in a direct message."""
