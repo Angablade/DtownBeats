@@ -1,6 +1,7 @@
 import discord
 import os
 import re
+import sys
 import json
 import random
 import tempfile
@@ -119,6 +120,10 @@ async def check_perms(ctx, guild_id):
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member == bot.user:
+
+        if before.channel is None:
+            return
+
         guild_id = before.channel.guild.id
 
         if guild_id in bot.timeout_tasks:
@@ -242,30 +247,12 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     while voice_client.is_playing():
         await asyncio.sleep(1)
 
-async def messagesender(bot, channel_id, message):
-    channel = bot.get_channel(channel_id)
-    if channel:
-        async with channel.typing():
-            if isinstance(message, discord.Embed):
-                await channel.send(embed=message)
-            else:
-                while message:
-                    if len(message) <= 2000:
-                        chunk = message
-                        message = ""
-                    else:
-                        split_index = message.rfind(" ", 0, 2000)
-                        if split_index == -1:
-                            chunk = message[:2000]
-                            message = message[2000:]
-                        else:
-                            chunk = message[:split_index]
-                            message = message[split_index + 1:]
-                    await channel.send(chunk)
-
 @bot.event
 async def on_ready():
-    print(f"Bot is ready! Logged in as {bot.user}")
+    try:
+        print(f"Bot is ready! Logged in as {bot.user}")
+    except Exception as e:
+        print(f"Error in on_ready: {e}")
 
 @bot.command(name="setprefix", aliases=["prefix"])
 async def setprefix(ctx, prefix: str):
@@ -327,6 +314,7 @@ async def play(ctx, *, search: str = None):
                 await messagesender(bot, ctx.channel.id, content="Failed to find the song.")
 
 async def handle_voice_connection(ctx):
+    guild_id = ctx.guild.id
     voice_channel = ctx.author.voice.channel
     if not ctx.voice_client:
         bot.intentional_disconnections[guild_id] = False
@@ -370,19 +358,29 @@ async def fetch_video_id_from_ytsearch(search: str, ctx):
     return result
 
 async def queue_and_play_next(ctx, guild_id: int, video_id: str):
-    video_title = await get_youtube_video_title(video_id)
-    
-    if not server_queues[guild_id].empty():
-        await messagesender(bot, ctx.channel.id, f"Queued: {video_title}")
-    else:
-        if ctx.voice_client.is_playing():
-            await messagesender(bot, ctx.channel.id, f"Queued: {video_title}")
-            
-    await server_queues[guild_id].put([video_id, video_title])
-    
-    if not ctx.voice_client.is_playing():
-        play_next_task = asyncio.create_task(play_next(ctx, ctx.voice_client))
-        await play_next_task
+    try:
+        video_title = await get_youtube_video_title(video_id)
+        if not video_title:
+            await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
+            return
+        
+        await server_queues[guild_id].put([video_id, video_title])
+        await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
+
+        if not ctx.voice_client:
+            if ctx.author.voice and ctx.author.voice.channel:
+                await ctx.author.voice.channel.connect()
+            else:
+                await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
+                return
+
+        if not ctx.voice_client.is_playing():
+            asyncio.create_task(play_next(ctx, ctx.voice_client))
+
+    except Exception as e:
+        await messagesender(bot, ctx.channel.id, f"Error adding to queue: {e}")
+
+
 
 @bot.command(name="skip")
 async def skip(ctx):
@@ -875,8 +873,8 @@ async def get_youtube_video_title(video_id):
 
 async def timeout_handler(ctx):
     await asyncio.sleep(TIMEOUT_TIME) 
-    
-    if ctx.guild.id in bot.voice_clients and not ctx.voice_client.is_playing():
+
+    if ctx.guild.id in bot.voice_clients and ctx.voice_client and ctx.voice_client.is_connected():
         await ctx.voice_client.disconnect()
         print(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
 
@@ -901,6 +899,18 @@ def search_musicbrainz(query):
     except musicbrainzngs.ResponseError as e:
         print(f"MusicBrainz API error: {e}")
         return None
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("You don't have permission to do that.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"Missing argument: {error.param.name}")
+    else:
+        await ctx.send(f"An error occurred: {error}")
+        raise error
 
 
 
