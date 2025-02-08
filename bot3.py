@@ -336,11 +336,11 @@ async def playlister(ctx, *, search: str = None):
             playlist_id = playlists[0]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
-            current_ids = []
+            current_ids = set()
             
             for video_id in video_ids:
                 if video_id not in current_ids:
-                    current_ids.add(video_id)
+                    current_ids.add(video_id) 
                     await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
             
             queue_size = server_queues[guild_id].qsize()
@@ -380,11 +380,13 @@ async def play(ctx, *, search: str = None):
             playlist_id = search.split("list=")[-1]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
-            current_ids = []
+            current_ids = set() 
+            
             for video_id in video_ids:
                 if video_id not in current_ids:
-                    current_ids.append(video_id)
+                    current_ids.add(video_id)
                     await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
+
             await messagesender(bot, ctx.channel.id, f"Added {server_queues[guild_id].qsize()} tracks from the playlist to the queue.")
             if not ctx.voice_client.is_playing():
                 await play_next(ctx, ctx.voice_client)
