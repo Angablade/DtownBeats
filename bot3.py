@@ -201,7 +201,6 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
         bar = "█" * filled_length + "░" * (bar_length - filled_length)
         await progress_message.edit(content=f"{startermessage}{phase}: [{bar}] {progress * 100:.1f}%")
 
-    print("downloading html")
     async with aiohttp.ClientSession() as session:
         async with session.get(playlist_url) as response:
             total_size = response.content_length or 1
@@ -220,11 +219,8 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
 
     await update_progress("Extracting", 0.5)
 
-    print("extracting")
     video_ids = re.findall(r'"videoId":"([\w-]{11})"', html_content)
     total_videos = len(video_ids)
-
-    print(total_videos)
 
     if total_videos == 0:
         await progress_message.edit(content="No videos found in the playlist.")
@@ -235,7 +231,7 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
         if i % max(1, total_videos // update_interval) == 0 or i == total_videos:
             await update_progress("Extracting", progress)
 
-    await progress_message.edit(content=f"✅ Playlist processing complete! Found {total_videos} videos.")
+    await progress_message.edit(content=f"✅ Playlist processing complete! Found {total_videos} IDs.")
     return video_ids
         
 async def play_next(ctx, voice_client):
@@ -328,7 +324,6 @@ async def playlister(ctx, *, search: str = None):
     if not await check_perms(ctx, guild_id):
         return
     
-    # ✅ Ensure the server queue exists
     if guild_id not in server_queues:
         server_queues[guild_id] = asyncio.Queue()
         current_tracks[guild_id] = {"current_track": None, "is_looping": False}
