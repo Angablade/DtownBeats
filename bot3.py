@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 from io import BytesIO
 from aiofiles import open as aopen
 from youtube_mp3 import get_mp3_filename
+from youtube_pl import grab_youtube_pl
 from lyrics import Lyrics
 from discord.ext import commands
 from discord.ui import View, Button
@@ -27,8 +28,8 @@ MUSICBRAINZ_CONTACT = os.getenv("MUSICBRAINZ_CONTACT", "default@example.com")
 BOT_OWNER_ID = int(os.getenv("BOT_OWNER_ID", 123456789))
 EXECUTOR_MAX_WORKERS = int(os.getenv("EXECUTOR_MAX_WORKERS", "10"))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_token")
-QUEUE_PAGE_SIZE = os.getenv("QUEUE_PAGE_SIZE","10")
-TIMEOUT_TIME = os.getenv("TIMEOUT_TIME", "60")
+QUEUE_PAGE_SIZE = int(os.getenv("QUEUE_PAGE_SIZE","10"))
+TIMEOUT_TIME = int(os.getenv("TIMEOUT_TIME", "60"))
 
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
@@ -277,6 +278,50 @@ async def setchannel(ctx, channel: discord.TextChannel):
         return
     update_server_config(ctx.guild.id, "channel", channel.id)
     await messagesender(bot, ctx.channel.id, f"Designated channel updated to: `{channel.name}`")
+
+@bot.command(name="grablist", aliases=["grabplaylist"])
+async def play(ctx, *, search: str = None):
+    await ctx.typing()
+    guild_id = ctx.guild.id
+
+    if not await check_perms(ctx, guild_id):
+        return
+    
+    if search:
+        playlists_json = await grab_youtube_pl(search)
+        playlists = json.loads(playlists_json)
+        
+        if playlists:
+            playlist_id = playlists[0]
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            
+            await messagesender(bot, ctx.channel.id, f"Processing: {playlist_id}")
+            video_ids = await fetch_playlist_videos(playlist_url)
+            
+            current_ids = set()
+            
+            for video_id in video_ids:
+                if video_id not in current_ids:
+                    current_ids.add(video_id)
+                    await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
+            
+            queue_size = server_queues[guild_id].qsize()
+            await messagesender(bot, ctx.channel.id, f"Added {queue_size} tracks from the playlist to the queue.")
+
+            if ctx.voice_client is None:
+                channel = ctx.author.voice.channel if ctx.author.voice else None
+                if channel:
+                    await channel.connect()
+                else:
+                    await messagesender(bot, ctx.channel.id, "You are not in a voice channel.")
+                    return
+
+            if not ctx.voice_client.is_playing():
+                await play_next(ctx, ctx.voice_client)
+        else:
+            await messagesender(bot, ctx.channel.id, "No playlists found for query.")
+    else:
+        await messagesender(bot, ctx.channel.id, "No search query entered!")
 
 @bot.command(name="play")
 async def play(ctx, *, search: str = None):
@@ -541,6 +586,7 @@ async def nowplaying(ctx):
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):
+    print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
     if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Shutting down.")
         await bot.close()
@@ -549,6 +595,7 @@ async def shutdown(ctx):
 
 @bot.command(name="reboot", aliases=["restart"])
 async def reboot(ctx):
+    print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
     if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Restarting the bot...")
         os.execv(sys.executable, ['python'] + sys.argv)
@@ -558,28 +605,25 @@ async def reboot(ctx):
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
     embed = discord.Embed(
-        title=f"DtownBeats - Version 0.2A [035843-07022025]",
+        title=f"DtownBeats - Version 0.2B [125528-08022025]",
         description="🎵 Bringing beats to your server with style!",
         color=discord.Color.dark_blue()
     )
 
     embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
     
-    # Source Code
     embed.add_field(
         name="📜 Source Code",
         value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
         inline=False
     )
 
-    # Docker Image
     embed.add_field(
         name="🐳 Docker Image",
         value="```\ndocker pull angablade/dtownbeats:latest```",
         inline=False
     )
 
-    # Footer with Author Info
     embed.set_footer(
         text=f"Created by Angablade",
         icon_url="https://img.angablade.com/ab-w.png"
@@ -616,7 +660,8 @@ async def help_command(ctx):
         f"`{ctx.prefix}remove <index>` - Remove a song from the queue by its position.\n"
         f"`{ctx.prefix}loop` - Toggle looping for the current song.\n"
         f"`{ctx.prefix}shuffle` - Shuffle the current music queue.\n"
-        f"`{ctx.prefix}move <from> <to>` - Move a song in the queue from one position to another."
+        f"`{ctx.prefix}move <from> <to>` - Move a song in the queue from one position to another.\n"
+        f"`{ctx.prefix}grablist <query> - Grabs a random user-generated playlist based on your query."
     ), inline=False)
     
     embed.add_field(name="", value=(""), inline=False)
@@ -637,6 +682,13 @@ async def help_command(ctx):
         f"`{ctx.prefix}setprefix <prefix>` - Set the bot's prefix.\n"
         f"`{ctx.prefix}setdjrole <role>` - Set the DJ role.\n"
         f"`{ctx.prefix}setchannel <channel>` - Set the designated command channel."
+    ), inline=False)
+
+    embed.add_field(name="", value=(""), inline=False)
+
+    embed.add_field(name="📇 Other Commands", value=(
+        f"`{ctx.prefix}version` - Direct messages the version information.\n"
+        f"`{ctx.prefix}commands` - Direct messages this menu."
     ), inline=False)
 
     embed.add_field(name="", value=(""), inline=False)
