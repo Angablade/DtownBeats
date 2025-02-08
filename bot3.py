@@ -207,12 +207,14 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
             downloaded = 0
             html_content = ""
 
-            async for chunk in response.content.iter_any(1024):
+            chunk_size = max(1, total_size // update_interval)  # ✅ Prevents ZeroDivisionError
+
+            async for chunk in response.content.iter_chunked(1024):
                 html_content += chunk.decode()
                 downloaded += len(chunk)
 
                 progress = min(0.5 * (downloaded / total_size), 0.5)
-                if downloaded % (total_size // update_interval) == 0:
+                if downloaded % chunk_size == 0:
                     await update_progress("Downloading", progress)
 
     await update_progress("Extracting", 0.5)
