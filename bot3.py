@@ -190,12 +190,46 @@ async def messagesender(bot, channel_id, content=None, embed=None):
             raise ValueError("Either 'content' or 'embed' must be provided")
 
 
-async def fetch_playlist_videos(playlist_url: str):
+async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
+    startermessage = f"Fetching playlist: ({playlist_id})\n"
+    progress_message = await ctx.send(startermessage)
+    bar_length = 20
+    update_interval = 10
+
+    async def update_progress(phase: str, progress: float):
+        filled_length = int(bar_length * progress)
+        bar = "█" * filled_length + "░" * (bar_length - filled_length)
+        await progress_message.edit(content=f"{startermessage}{phase}: [{bar}] {progress * 100:.1f}%")
+
     async with aiohttp.ClientSession() as session:
         async with session.get(playlist_url) as response:
-            html_content = await response.text()
-            video_ids = re.findall(r'"videoId":"([\w-]{11})"', html_content)
-            return video_ids
+            total_size = response.content_length or 1
+            downloaded = 0
+            html_content = ""
+
+            async for chunk in response.content.iter_any(1024):
+                html_content += chunk.decode()
+                downloaded += len(chunk)
+
+                progress = min(0.5 * (downloaded / total_size), 0.5)
+                if downloaded % (total_size // update_interval) == 0:
+                    await update_progress("Downloading", progress)
+
+    await update_progress("Extracting", 0.5)
+    video_ids = re.findall(r'"videoId":"([\w-]{11})"', html_content)
+    total_videos = len(video_ids)
+
+    if total_videos == 0:
+        await progress_message.edit(content="No videos found in the playlist.")
+        return video_ids
+
+    for i, _ in enumerate(video_ids, 1):
+        progress = 0.5 + (i / total_videos) * 0.5
+        if i % max(1, total_videos // update_interval) == 0 or i == total_videos:
+            await update_progress("Extracting", progress)
+
+    await progress_message.edit(content=f"✅ Playlist processing complete! Found {total_videos} videos.")
+    return video_ids
         
 async def play_next(ctx, voice_client):
     await ctx.typing() 
@@ -294,10 +328,7 @@ async def play(ctx, *, search: str = None):
         if playlists:
             playlist_id = playlists[0]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-            
-            await messagesender(bot, ctx.channel.id, f"Processing: {playlist_id}")
-            video_ids = await fetch_playlist_videos(playlist_url)
-            
+            video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
             current_ids = set()
             
             for video_id in video_ids:
@@ -341,8 +372,7 @@ async def play(ctx, *, search: str = None):
         if "playlist" in search and "list=" in search:
             playlist_id = search.split("list=")[-1]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-            await messagesender(bot, ctx.channel.id, f"Processing:  {playlist_id}")
-            video_ids = await fetch_playlist_videos(playlist_url)
+            video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
             current_ids = []
             for video_id in video_ids:
                 if video_id not in current_ids:
