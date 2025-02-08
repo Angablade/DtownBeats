@@ -328,6 +328,11 @@ async def playlister(ctx, *, search: str = None):
     if not await check_perms(ctx, guild_id):
         return
     
+    # ✅ Ensure the server queue exists
+    if guild_id not in server_queues:
+        server_queues[guild_id] = asyncio.Queue()
+        current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
     if search:
         playlists_json = await grab_youtube_pl(search)
         playlists = json.loads(playlists_json)
@@ -340,7 +345,7 @@ async def playlister(ctx, *, search: str = None):
             
             for video_id in video_ids:
                 if video_id not in current_ids:
-                    current_ids.add(video_id) 
+                    current_ids.add(video_id)
                     await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
             
             queue_size = server_queues[guild_id].qsize()
@@ -360,6 +365,7 @@ async def playlister(ctx, *, search: str = None):
             await messagesender(bot, ctx.channel.id, "No playlists found for query.")
     else:
         await messagesender(bot, ctx.channel.id, "No search query entered!")
+
 
 @bot.command(name="play")
 async def play(ctx, *, search: str = None):
