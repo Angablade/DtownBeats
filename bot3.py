@@ -207,9 +207,9 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
             downloaded = 0
             html_content = ""
 
-            chunk_size = max(1, total_size // update_interval)  # ✅ Prevents ZeroDivisionError
+            chunk_size = max(1, total_size // update_interval)
 
-            async for chunk in response.content.iter_chunked(1024):
+            async for chunk in response.content.iter_any():
                 html_content += chunk.decode()
                 downloaded += len(chunk)
 
