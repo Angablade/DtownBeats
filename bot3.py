@@ -201,6 +201,7 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
         bar = "█" * filled_length + "░" * (bar_length - filled_length)
         await progress_message.edit(content=f"{startermessage}{phase}: [{bar}] {progress * 100:.1f}%")
 
+    print("downloading html")
     async with aiohttp.ClientSession() as session:
         async with session.get(playlist_url) as response:
             total_size = response.content_length or 1
@@ -218,8 +219,12 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
                     await update_progress("Downloading", progress)
 
     await update_progress("Extracting", 0.5)
+
+    print("extracting")
     video_ids = re.findall(r'"videoId":"([\w-]{11})"', html_content)
     total_videos = len(video_ids)
+
+    print(total_videos)
 
     if total_videos == 0:
         await progress_message.edit(content="No videos found in the playlist.")
@@ -316,7 +321,7 @@ async def setchannel(ctx, channel: discord.TextChannel):
     await messagesender(bot, ctx.channel.id, f"Designated channel updated to: `{channel.name}`")
 
 @bot.command(name="grablist", aliases=["grabplaylist"])
-async def play(ctx, *, search: str = None):
+async def playlister(ctx, *, search: str = None):
     await ctx.typing()
     guild_id = ctx.guild.id
 
@@ -331,7 +336,7 @@ async def play(ctx, *, search: str = None):
             playlist_id = playlists[0]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
-            current_ids = set()
+            current_ids = []
             
             for video_id in video_ids:
                 if video_id not in current_ids:
