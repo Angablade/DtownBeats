@@ -341,7 +341,7 @@ async def playlister(ctx, *, search: str = None):
         playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
         playlist_title = await get_youtube_playlist_title(playlist_url)
 
-        while "podcast" in ''.join(playlist_title):
+        while "podcast" in playlist_title.lower():
             index += 1
             if index >= len(playlists):
                 await messagesender(bot, ctx.channel.id, "No suitable playlists found (all contained 'podcast').")
@@ -1031,22 +1031,31 @@ async def get_youtube_playlist_title(playlist_id):
     
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(url) as response:
+            async with session.get(url, headers={"User-Agent": "Mozilla/5.0"}) as response:
                 response.raise_for_status()
                 html_content = await response.text()
                 
-                soup = BeautifulSoup(html_content, "html.parser")
-                title_element = soup.find_all(name="title")[0]
-                title = str(title_element)
-                title = title.replace("<title>", "").replace("</title>", "").removesuffix(" - YouTube")
+                match = re.search(r'var ytInitialData = ({.*?});</script>', html_content, re.DOTALL)
+                if not match:
+                    print(f"Error: Could not find JSON metadata for {playlist_id}")
+                    return "Unknown Playlist"
+                
+                json_data = json.loads(match.group(1))
+                
+                title = json_data.get("header", {}).get("playlistHeaderRenderer", {}).get("title")
+                
+                if not title:
+                    print(f"Error: Playlist title not found in metadata for {playlist_id}")
+                    return "Unknown Playlist"
                 
                 if "drake" in title.lower():
                     raise IndexError("Out of bounds error: 'drake' is not allowed.")
                     
                 return title
-        except (aiohttp.ClientError, IndexError) as e:
-            print(f"Error fetching video title: {e}")
-            return None
+        except (aiohttp.ClientError, json.JSONDecodeError, IndexError, KeyError) as e:
+            print(f"Error fetching playlist title: {e}")
+            return "Unknown Playlist"
+
 
 async def timeout_handler(ctx):
     await asyncio.sleep(TIMEOUT_TIME) 
