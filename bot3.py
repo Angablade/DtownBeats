@@ -11,6 +11,7 @@ import asyncio
 import aiohttp
 import musicbrainzngs
 import shutil
+import subprocess
 
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
@@ -92,6 +93,9 @@ bot.timeout_tasks = {}
 server_queues = {}
 current_tracks = {}
 queue_paused = {}
+track_history = {}
+autoplay_enabled = {}
+message_map = {}
 
 async def download_audio(video_id):
     try: 
@@ -161,18 +165,39 @@ async def on_guild_join(guild):
         server_queues[guild.id] = asyncio.Queue()
     print(f"Joined new guild: {guild.name}, initialized queue.")
 
-import discord
+def is_banned_title(title):
+    banned_keywords = [
+        "drake",
+        "30 for 30 freestyle",
+        "forever (feat kanye west, lil wayne and eminem)",
+        "demons (feat fivio foreign and sosa geek)",
+        "ignant shit",
+        "ice melts (feat young thug)",
+        "take care (feat rihanna)",
+        "controlla",
+        "laugh now cry later",
+        "hold on, we’re going home",
+        "hotline bling",
+        "Dark Lane Demo Tapes",
+        "For All the Dogs",
+        "Some Sexy Songs 4 U",
+        "Certified Lover Boy"
+    ]
+    
+    title = title.lower().strip()
+    return any(keyword in title for keyword in banned_keywords)
 
-async def messagesender(bot, channel_id, content=None, embed=None):
+async def messagesender(bot, channel_id, content=None, embed=None, command_message=None):
     channel = bot.get_channel(channel_id)
     if not channel:
         return
     
+    messages = []
     async with channel.typing():
         if embed and content:
-            await channel.send(content=content, embed=embed)
+            messages.append(await channel.send(content=content, embed=embed))
         elif embed:
-            await channel.send(embed=embed)
+            messages.append(await channel.send(embed=embed))
         elif content:
             while content:
                 if len(content) <= 2000:
@@ -186,9 +211,28 @@ async def messagesender(bot, channel_id, content=None, embed=None):
                     else:
                         chunk = content[:split_index]
                         content = content[split_index + 1:]
-                await channel.send(chunk)
+                messages.append(await channel.send(chunk))
         else:
             raise ValueError("Either 'content' or 'embed' must be provided")
+    
+    if command_message:
+        message_map[command_message.id] = messages
+
+
+def add_track_to_history(guild_id, video_id, video_title):
+    if guild_id not in track_history:
+        track_history[guild_id] = []
+    track_history[guild_id].append((video_id, video_title))
+    if len(track_history[guild_id]) > 20:
+        track_history[guild_id].pop(0) 
+
+async def check_empty_channel(ctx):
+    await asyncio.sleep(60)
+    if ctx.voice_client and len(ctx.voice_client.channel.members) == 1:
+        guild_id = ctx.guild.id
+        if bot.intentional_disconnections.get(guild_id, False):
+            return
+        await ctx.voice_client.disconnect()
 
 
 async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
@@ -236,43 +280,51 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
     return video_ids
         
 async def play_next(ctx, voice_client):
-    await ctx.typing() 
+    await ctx.typing()
     guild_id = ctx.guild.id
     
     if queue_paused.get(guild_id, False):
         return
         
     if server_queues[guild_id].empty():
-        await messagesender(bot, ctx.channel.id, content="The queue is empty.")
+        if autoplay_enabled.get(guild_id, False):
+            last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
+            if last_track:
+                next_video = await get_related_video(last_track)
+                if next_video:
+                    await queue_and_play_next(ctx, guild_id, next_video)
+                    return
+        await messagesender(bot, ctx.channel.id, "The queue is empty.")
+        await check_empty_channel(ctx)
         return
     
     videoinfo = await server_queues[guild_id].get()
-    video_id = ''.join(videoinfo[:1])
-    video_title = ''.join(videoinfo[1:])
+    video_id, video_title = videoinfo[0], videoinfo[1]
     
     audio_file_task = asyncio.create_task(download_audio(video_id))
     audio_file = await audio_file_task
     
     if not audio_file:
-        await messagesender(bot, ctx.channel.id, content="Failed to download the track. Please try again.")
+        await messagesender(bot, ctx.channel.id, "Failed to download the track. Please try again.")
         return
     
+    add_track_to_history(guild_id, video_id, video_title)
     await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
-
     await play_next(ctx, voice_client)
 
 async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id):
     guild_id = ctx.guild.id
-    if "drake" in video_title.lower():
-        raise IndexError("Out of bounds error: 'drake' is not allowed.")
-        return "Out of bounds error: 'drake' is not allowed."
-        
+    if is_banned_title(video_title):
+        await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
+        raise ValueError("Out of bounds error: This content is not allowed.")
+        return
+
     await messagesender(bot, ctx.channel.id, f"Now playing: `{video_title}`")
 
     current_tracks[guild_id]["current_track"] = [video_id, video_title]
 
     def playback():
-        source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options="-bufsize 10m")
+        source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options="-bufsize 10m -ss 00:00:00")
         voice_client.play(source, after=lambda e: print(f"Playback finished: {e}") if e else None)
 
     loop = asyncio.get_event_loop()
@@ -373,14 +425,14 @@ async def playlister(ctx, *, search: str = None):
                 await scanning_message.edit(content=f"Added: {video_id}!")
 
         queue_size = server_queues[guild_id].qsize()
-        await messagesender(bot, ctx.channel.id, f"Added {queue_size} tracks from the playlist to the queue.")
+        await scanning_message.edit(content=f"Added {queue_size} tracks from the playlist to the queue.")
 
         if ctx.voice_client is None:
             channel = ctx.author.voice.channel if ctx.author.voice else None
             if channel:
                 await channel.connect()
             else:
-                await messagesender(bot, ctx.channel.id, "You are not in a voice channel.")
+                await scanning_message.edit(content=f"You are not in a voice channel.")
                 return
 
         if not ctx.voice_client.is_playing():
@@ -435,9 +487,8 @@ async def handle_voice_connection(ctx):
         await voice_channel.connect()
 
 async def fetch_video_id(ctx, search: str) -> str:
-    if "drake" in search.lower():
-        raise IndexError("Out of bounds error: 'drake' is not allowed.")
-        return "Out of bounds error: 'drake' is not allowed."
+    if is_banned_title(search):
+        raise ValueError("Out of bounds error: This content is not allowed.")
         
     youtube_id_match = re.match(
         r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/|music\.youtube\.com/watch\?v=)?([\w-]{11})', 
@@ -683,7 +734,7 @@ async def reboot(ctx):
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
     embed = discord.Embed(
-        title=f"DtownBeats - Version 0.2E [200111-08022025]",
+        title=f"DtownBeats - Version 0.2F [083021-09022025]",
         description="🎵 Bringing beats to your server with style!",
         color=discord.Color.dark_blue()
     )
@@ -739,7 +790,9 @@ async def help_command(ctx):
         f"`{ctx.prefix}loop` - Toggle looping for the current song.\n"
         f"`{ctx.prefix}shuffle` - Shuffle the current music queue.\n"
         f"`{ctx.prefix}move <from> <to>` - Move a song in the queue from one position to another.\n"
-        f"`{ctx.prefix}grablist <query> - Grabs a random user-generated playlist based on your query."
+        f"`{ctx.prefix}grablist <query> - Grabs a random user-generated playlist based on your query.\n"
+        f"`{ctx.prefix}history` - Displays the played track history.\n"
+        f"`{ctx.prefix}autoplay` - Toggles an alpha autoplay mode that should scrobble play music automatically."
     ), inline=False)
     
     embed.add_field(name="", value=(""), inline=False)
@@ -783,11 +836,11 @@ async def help_command(ctx):
     except discord.Forbidden:
         await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
 
-
 @bot.command(name="seek")
 async def seek(ctx, position: str):
     await ctx.typing()
     guild_id = ctx.guild.id
+    
     if not await check_perms(ctx, guild_id):
         return
         
@@ -795,39 +848,62 @@ async def seek(ctx, position: str):
         await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
         return
 
-    await ctx.typing()
-    guild_id = ctx.guild.id
     current_track = current_tracks.get(guild_id, {}).get("current_track")
-    if current_track is None:
+    if not current_track:
         await messagesender(bot, ctx.channel.id, content="There's no track information available to seek.")
+        return
+    
+    video_id = current_track[0]
+    audio_file = f"music/{video_id}.mp3"
+    if not os.path.exists(audio_file):
+        await messagesender(bot, ctx.channel.id, content="Audio file not found for seeking.")
+        return
+    def get_audio_duration(file_path):
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-i", file_path, "-f", "null", "-"],
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            duration_line = [line for line in result.stderr.split("\n") if "Duration" in line]
+            if duration_line:
+                time_str = duration_line[0].split(",")[0].split("Duration:")[1].strip()
+                h, m, s = map(float, time_str.split(":"))
+                return int(h * 3600 + m * 60 + s)
+        except Exception as e:
+            print(f"Error getting duration: {e}")
+        return None
+
+    duration = get_audio_duration(audio_file)
+    if not duration:
+        await messagesender(bot, ctx.channel.id, content="Could not determine audio duration.")
         return
 
     try:
-        async with aiohttp.ClientSession() as session:
-            ydl_opts = {'quiet': True}
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(f"https://www.youtube.com/watch?v={current_track}", download=False)
-                duration = info.get("duration", 0)
-
         if position.endswith("%"):
             percent = int(position.strip("%"))
             if not (0 <= percent <= 100):
                 raise ValueError("Percentage must be between 0 and 100.")
             seconds = int(duration * (percent / 100))
+        elif ":" in position:
+            minutes, seconds = map(int, position.split(":"))
+            seconds = minutes * 60 + seconds
         else:
             seconds = int(position)
-            if seconds < 0 or seconds > duration:
-                raise ValueError(f"Position must be between 0 and {duration} seconds.")
+        
+        if seconds < 0 or seconds > duration:
+            raise ValueError(f"Position must be between 0 and {duration} seconds.")
 
         ctx.voice_client.stop()
-        audio_file = await download_audio(current_track)
-        ffmpeg_options = f"-ss {seconds}"
-        source = FFmpegPCMAudio(audio_file, options=ffmpeg_options)
+        ffmpeg_options = f"-ss {seconds} -bufsize 10m"
+        source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options=ffmpeg_options)
         ctx.voice_client.play(source, after=lambda _: asyncio.run_coroutine_threadsafe(play_next(ctx, ctx.voice_client), bot.loop))
 
-        await messagesender(bot, ctx.channel.id, f"Seeking to {seconds} seconds.")
+        await messagesender(bot, ctx.channel.id, f"⏩ Seeking to `{seconds}` seconds.")
+    
     except Exception as e:
         await messagesender(bot, ctx.channel.id, f"An error occurred while seeking: {e}")
+
 
 @bot.command(name="mute")
 async def toggle_mute(ctx):
@@ -985,7 +1061,11 @@ async def leave_channel(ctx):
 
 @bot.command(name="sendplox")
 async def sendmp3(ctx):
+    await ctx.typing()
     guild_id = ctx.guild.id
+    if not await check_perms(ctx, guild_id):
+        return
+
     dir_path = os.path.dirname(os.path.realpath(__file__)).replace("\\", "/")
     current_track = current_tracks.get(guild_id, {}).get("current_track")
     file_path = f"music/{''.join(current_track[:1])}.mp3"
@@ -1016,6 +1096,39 @@ async def sendmp3(ctx):
             await ctx.author.typing()
             await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
 
+@bot.command(name="history" aliases=["played"])
+async def history(ctx):
+    await ctx.typing()
+    guild_id = ctx.guild.id
+    if not await check_perms(ctx, guild_id):
+        return
+
+    history_list = track_history.get(guild_id, [])
+
+    if not history_list:
+        await messagesender(bot, ctx.channel.id, "No recent tracks available.")
+        return
+    
+    embed = discord.Embed(title="\U0001F3B5 Recently Played Songs", color=discord.Color.blue())
+    for index, track in enumerate(history_list[-5:], start=1):
+        embed.add_field(name=f"{index}. {track[1]}", value=f"ID: {track[0]}", inline=False)
+    await messagesender(bot, ctx.channel.id, embed=embed)
+
+@bot.command(name="autoplay")
+async def autoplay(ctx, mode: str):
+    await ctx.typing()
+    guild_id = ctx.guild.id
+    if not await check_perms(ctx, guild_id):
+        return
+
+    if mode.lower() not in ["on", "off"]:
+        await messagesender(bot, ctx.channel.id, "Use `!autoplay on` or `!autoplay off`.")
+        return
+
+    autoplay_enabled[guild_id] = mode.lower() == "on"
+    status = "enabled" if autoplay_enabled[guild_id] else "disabled"
+    await messagesender(bot, ctx.channel.id, f"Autoplay is now {status}.")
+
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
     
@@ -1030,13 +1143,22 @@ async def get_youtube_video_title(video_id):
                 title = str(title_element)
                 title = title.replace("<title>", "").replace("</title>", "").removesuffix(" - YouTube").replace("&amp;","&")
                 
-                if "drake" in title.lower():
-                    raise IndexError("Out of bounds error: 'drake' is not allowed.")
+                if is_banned_title(title):
+                    raise ValueError("Out of bounds error: This content is not allowed.")
                     
                 return title
         except (aiohttp.ClientError, IndexError) as e:
             print(f"Error fetching video title: {e}")
             return None
+
+@bot.event
+async def on_message_delete(message):
+    if message.id in message_map:
+        try:
+            await message_map[message.id].delete()
+        except discord.NotFound:
+            pass
+        del message_map[message.id]
 
 async def get_youtube_playlist_title(playlist_id):
     url = f"https://www.youtube.com/playlist?list={playlist_id}"
@@ -1060,8 +1182,8 @@ async def get_youtube_playlist_title(playlist_id):
                     print(f"Error: Playlist title not found in metadata for {playlist_id}")
                     return "Unknown Playlist"
                 
-                if "drake" in title.lower():
-                    raise IndexError("Out of bounds error: 'drake' is not allowed.")
+                if is_banned_title(title):
+                    raise ValueError("Out of bounds error: This content is not allowed.")
                     
                 return title
         except (aiohttp.ClientError, json.JSONDecodeError, IndexError, KeyError) as e:
