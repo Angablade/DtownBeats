@@ -340,7 +340,7 @@ async def playlister(ctx, *, search: str = None):
         playlist_id = playlists[index]
         playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
 
-        while "podcast" in (await get_youtube_playlist_title(playlist_url)).lower():
+        while "podcast" in (await get_youtube_playlist_title(playlist_url)):
             index += 1
             if index >= len(playlists):
                 await messagesender(bot, ctx.channel.id, "No suitable playlists found (all contained 'podcast').")
