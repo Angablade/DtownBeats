@@ -740,6 +740,8 @@ async def reboot(ctx):
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
 
+import subprocess
+
 @bot.command(name="dockboot", aliases=["dockerrestart"])
 async def dockboot(ctx):
     print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
@@ -750,6 +752,7 @@ async def dockboot(ctx):
         await bot.close()
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the Docker container.")
+
 
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
