@@ -10,6 +10,7 @@ import yt_dlp
 import asyncio
 import aiohttp
 import musicbrainzngs
+import shutil
 
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
@@ -1027,7 +1028,7 @@ async def get_youtube_video_title(video_id):
                 soup = BeautifulSoup(html_content, "html.parser")
                 title_element = soup.find_all(name="title")[0]
                 title = str(title_element)
-                title = title.replace("<title>", "").replace("</title>", "").removesuffix(" - YouTube")
+                title = title.replace("<title>", "").replace("</title>", "").removesuffix(" - YouTube").replace("&amp;","&")
                 
                 if "drake" in title.lower():
                     raise IndexError("Out of bounds error: 'drake' is not allowed.")
