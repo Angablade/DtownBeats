@@ -670,7 +670,7 @@ async def reboot(ctx):
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
     embed = discord.Embed(
-        title=f"DtownBeats - Version 0.2C [144322-08022025]",
+        title=f"DtownBeats - Version 0.2D [191911-08022025]",
         description="🎵 Bringing beats to your server with style!",
         color=discord.Color.dark_blue()
     )
