@@ -291,35 +291,35 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
 async def play_next(ctx, voice_client):
     await ctx.typing()
     guild_id = ctx.guild.id
-    
-    if queue_paused.get(guild_id, False):
+    if autoplay_enabled.get(guild_id, False) and bot.intentional_disconnections.get(guild_id, False):
         return
-        
-    if server_queues[guild_id].empty():
-        if autoplay_enabled.get(guild_id, False):
-            last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
-            if last_track:
-                next_video = await get_related_video(last_track)
-                if next_video:
-                    await queue_and_play_next(ctx, guild_id, next_video)
-                    return
-        await messagesender(bot, ctx.channel.id, "The queue is empty.")
-        await check_empty_channel(ctx)
-        return
-    
-    videoinfo = await server_queues[guild_id].get()
-    video_id, video_title = videoinfo[0], videoinfo[1]
-    
-    audio_file_task = asyncio.create_task(download_audio(video_id))
-    audio_file = await audio_file_task
-    
-    if not audio_file:
-        await messagesender(bot, ctx.channel.id, "Failed to download the track. Please try again.")
-        return
-    
-    add_track_to_history(guild_id, video_id, video_title)
-    await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
-    await play_next(ctx, voice_client)
+
+    while not queue_paused.get(guild_id, False):
+        if server_queues[guild_id].empty():
+            if autoplay_enabled.get(guild_id, False):
+                last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
+                if last_track:
+                    next_video = await get_related_video(last_track)
+                    if next_video:
+                        await queue_and_play_next(ctx, guild_id, next_video)
+                        continue 
+            await messagesender(bot, ctx.channel.id, "The queue is empty.")
+            await check_empty_channel(ctx)
+            break
+
+        videoinfo = await server_queues[guild_id].get()
+        video_id, video_title = videoinfo[0], videoinfo[1]
+
+        audio_file = await download_audio(video_id)
+        if not audio_file:
+            await messagesender(bot, ctx.channel.id, "Failed to download the track. Skipping...")
+            continue 
+
+        add_track_to_history(guild_id, video_id, video_title)
+        await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
+
+    bot.intentional_disconnections[guild_id] = False
+
 
 async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id):
     guild_id = ctx.guild.id
@@ -1137,8 +1137,11 @@ async def autoplay(ctx, mode: str):
         return
 
     autoplay_enabled[guild_id] = mode.lower() == "on"
+    bot.intentional_disconnections[guild_id] = False 
+
     status = "enabled" if autoplay_enabled[guild_id] else "disabled"
-    await messagesender(bot, ctx.channel.id, f"Autoplay is now {status}.")
+    await messagesender(bot, ctx.channel.id, f"Autoplay is now {status} for this server.")
+
 
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
