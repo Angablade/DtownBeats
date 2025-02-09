@@ -1096,7 +1096,7 @@ async def sendmp3(ctx):
             await ctx.author.typing()
             await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
 
-@bot.command(name="history" aliases=["played"])
+@bot.command(name="history", aliases=["played"])
 async def history(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
