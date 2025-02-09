@@ -165,6 +165,15 @@ async def on_guild_join(guild):
         server_queues[guild.id] = asyncio.Queue()
     print(f"Joined new guild: {guild.name}, initialized queue.")
 
+async def get_related_video(video_id):
+    url = f"https://www.youtube.com/watch?v={video_id}"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            html_content = await response.text()
+            match = re.findall(r'"videoId":"([\w-]{11})"', html_content)
+            return match[1] if match else None 
+
 def is_banned_title(title):
     banned_keywords = [
         "drake",
