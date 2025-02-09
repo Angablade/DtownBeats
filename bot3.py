@@ -740,10 +740,21 @@ async def reboot(ctx):
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
 
+@bot.command(name="dockboot", aliases=["dockerrestart"])
+async def dockboot(ctx):
+    print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
+    if ctx.author.id == BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="Restarting the Docker container...")
+        container_id = subprocess.check_output("hostname", text=True).strip()
+        subprocess.run(["docker", "restart", container_id])
+        await bot.close()
+    else:
+        await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the Docker container.")
+
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
     embed = discord.Embed(
-        title=f"DtownBeats - Version 0.2F [083021-09022025]",
+        title=f"DtownBeats - Version 0.2G [114111-09022025]",
         description="🎵 Bringing beats to your server with style!",
         color=discord.Color.dark_blue()
     )
