@@ -282,6 +282,16 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(ctx))
 
+    if not server_queues[guild_id].empty():
+        temp_queue = list(server_queues[guild_id]._queue)
+
+        if temp_queue:
+            next_videoinfo = temp_queue[0] 
+            next_video_id, next_video_title = next_videoinfo 
+
+            print(f"Pre-downloading next track: {next_video_title}")
+            asyncio.create_task(download_audio(next_video_id))
+
     while voice_client.is_playing():
         await asyncio.sleep(1)
 
@@ -339,7 +349,7 @@ async def playlister(ctx, *, search: str = None):
         index = 0
         playlist_id = playlists[index]
         playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-        playlist_title = await get_youtube_playlist_title(playlist_url)
+        playlist_title = await get_youtube_playlist_title(playlist_id)
 
         while "podcast" in playlist_title.lower():
             index += 1
@@ -348,7 +358,7 @@ async def playlister(ctx, *, search: str = None):
                 return
             playlist_id = playlists[index]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-            playlist_title = await get_youtube_playlist_title(playlist_url)
+            playlist_title = await get_youtube_playlist_title(playlist_id)
 
         video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
         current_ids = set()
@@ -672,7 +682,7 @@ async def reboot(ctx):
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
     embed = discord.Embed(
-        title=f"DtownBeats - Version 0.2D [191911-08022025]",
+        title=f"DtownBeats - Version 0.2E [200111-08022025]",
         description="🎵 Bringing beats to your server with style!",
         color=discord.Color.dark_blue()
     )
@@ -755,6 +765,7 @@ async def help_command(ctx):
 
     embed.add_field(name="📇 Other Commands", value=(
         f"`{ctx.prefix}version` - Direct messages the version information.\n"
+        f"`{ctx.prefix}sendplox` - Does some nice things some times.\n"
         f"`{ctx.prefix}commands` - Direct messages this menu."
     ), inline=False)
 
