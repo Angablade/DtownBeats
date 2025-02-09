@@ -330,40 +330,50 @@ async def playlister(ctx, *, search: str = None):
 
     if search:
         playlists_json = await grab_youtube_pl(search)
-        playlists = json.loads(playlists_json)
-        
-        if playlists:
-            playlist_id = playlists[0]
-            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-            video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
-            current_ids = set()
+        playlists = json.loads(playlists_json) 
 
-            scanning_message = await ctx.send(f"Scanning playlist")
-            for video_id in video_ids:
-                await scanning_message.edit(content=f"Scanned: {video_id}")
-                if video_id not in current_ids:
-                    current_ids.add(video_id
-                    await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
-                    await scanning_message.edit(content=f"added: {video_id}!")
-
-            queue_size = server_queues[guild_id].qsize()
-            await messagesender(bot, ctx.channel.id, f"Added {queue_size} tracks from the playlist to the queue.")
-
-            if ctx.voice_client is None:
-                channel = ctx.author.voice.channel if ctx.author.voice else None
-                if channel:
-                    await channel.connect()
-                else:
-                    await messagesender(bot, ctx.channel.id, "You are not in a voice channel.")
-                    return
-
-            if not ctx.voice_client.is_playing():
-                await play_next(ctx, ctx.voice_client)
-        else:
+        if not playlists:
             await messagesender(bot, ctx.channel.id, "No playlists found for query.")
+            return
+
+        index = 0
+        playlist_id = playlists[index]
+        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+        while "podcast" in (await get_youtube_playlist_title(playlist_url)).lower():
+            index += 1
+            if index >= len(playlists):
+                await messagesender(bot, ctx.channel.id, "No suitable playlists found (all contained 'podcast').")
+                return
+            playlist_id = playlists[index]
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+        video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
+        current_ids = set()
+
+        scanning_message = await ctx.send("Scanning playlist")
+        for video_id in video_ids:
+            await scanning_message.edit(content=f"Scanned: {video_id}")
+            if video_id not in current_ids:
+                current_ids.add(video_id)
+                await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
+                await scanning_message.edit(content=f"Added: {video_id}!")
+
+        queue_size = server_queues[guild_id].qsize()
+        await messagesender(bot, ctx.channel.id, f"Added {queue_size} tracks from the playlist to the queue.")
+
+        if ctx.voice_client is None:
+            channel = ctx.author.voice.channel if ctx.author.voice else None
+            if channel:
+                await channel.connect()
+            else:
+                await messagesender(bot, ctx.channel.id, "You are not in a voice channel.")
+                return
+
+        if not ctx.voice_client.is_playing():
+            await play_next(ctx, ctx.voice_client)
     else:
         await messagesender(bot, ctx.channel.id, "No search query entered!")
-
 
 @bot.command(name="play")
 async def play(ctx, *, search: str = None):
@@ -432,21 +442,30 @@ async def fetch_video_id(ctx, search: str) -> str:
 
 async def fetch_video_id_from_ytsearch(search: str, ctx):
     loop = asyncio.get_running_loop()
-    ydl_opts = {"default_search": "ytsearch1", "quiet": True}
+    ydl_opts = {
+        "default_search": "ytsearch1",
+        "quiet": True,
+        "no_warnings": True 
+    }
 
     def run_yt_dlp():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(search, download=False)
-                return info['entries'][0]['id']
+                if "entries" not in info or not info["entries"]: 
+                    return None
+                return info["entries"][0]["id"]
             except Exception as e:
-                return e
+                return None 
 
     result = await loop.run_in_executor(executor, run_yt_dlp)
-    if isinstance(result, Exception):
-        await messagesender(bot, ctx.channel.id, f"Failed to find the song: {result}")
+
+    if not result:
+        await messagesender(bot, ctx.channel.id, f"Failed to find a song for: `{search}`")
         return None
+
     return result
+
 
 async def queue_and_play_next(ctx, guild_id: int, video_id: str):
     try:
@@ -985,6 +1004,28 @@ async def sendmp3(ctx):
 
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                html_content = await response.text()
+                
+                soup = BeautifulSoup(html_content, "html.parser")
+                title_element = soup.find_all(name="title")[0]
+                title = str(title_element)
+                title = title.replace("<title>", "").replace("</title>", "").removesuffix(" - YouTube")
+                
+                if "drake" in title.lower():
+                    raise IndexError("Out of bounds error: 'drake' is not allowed.")
+                    
+                return title
+        except (aiohttp.ClientError, IndexError) as e:
+            print(f"Error fetching video title: {e}")
+            return None
+
+async def get_youtube_playlist_title(playlist_id):
+    url = f"https://www.youtube.com/playlist?list={playlist_id}"
     
     async with aiohttp.ClientSession() as session:
         try:
