@@ -803,6 +803,8 @@ async def help_command(ctx):
         f"`{ctx.prefix}leave` - Disconnect the bot from the voice channel."
     ), inline=False)
 
+    embed.add_field(name="", value=(""), inline=False)
+
     embed.add_field(name="📜 Lyrics Commands", value=(
         f"`{ctx.prefix}lyrics <song>` - Get the lyrics for the specified song. If no song is provided, tries to get the lyrics for the currently playing track."
     ), inline=False)
