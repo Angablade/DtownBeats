@@ -565,7 +565,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str):
 
 
 
-@bot.command(name="skip")
+@bot.command(name="skip", aliases=["next"])
 async def skip(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
@@ -590,7 +590,7 @@ async def stop(ctx):
         current_tracks[guild_id] = {"current_track": None, "is_looping": False}
         await messagesender(bot, ctx.channel.id, content="Stopped the bot and left the voice channel.")
 
-@bot.command(name="pause")
+@bot.command(name="pause", aliases=["hold"])
 async def pause(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
@@ -602,7 +602,7 @@ async def pause(ctx):
         queue_paused[guild_id] = True
         await messagesender(bot, ctx.channel.id, content="Paused the music")
 
-@bot.command(name="resume")
+@bot.command(name="resume", aliases=["continue"])
 async def resume(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
@@ -699,7 +699,7 @@ async def remove(ctx, index: int):
     except IndexError:
         await messagesender(bot, ctx.channel.id, content="Invalid index.")
 
-@bot.command(name="loop")
+@bot.command(name="loop", aliases=["repeat"])
 async def loop(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
@@ -916,7 +916,7 @@ async def seek(ctx, position: str):
         await messagesender(bot, ctx.channel.id, f"An error occurred while seeking: {e}")
 
 
-@bot.command(name="mute")
+@bot.command(name="mute", aliases=["quiet"])
 async def toggle_mute(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
@@ -1041,7 +1041,7 @@ async def move_song(ctx, from_pos: int, to_pos: int):
         await messagesender(bot, ctx.channel.id, content="Invalid positions. Please provide valid track numbers from the queue.")
 
 
-@bot.command(name="join")
+@bot.command(name="join", aliases=["come"])
 async def join_channel(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
@@ -1056,7 +1056,7 @@ async def join_channel(ctx):
     else:
         await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
 
-@bot.command(name="leave")
+@bot.command(name="leave", aliases=["go"])
 async def leave_channel(ctx):
     await ctx.typing()
     guild_id = ctx.guild.id
@@ -1125,7 +1125,7 @@ async def history(ctx):
         embed.add_field(name=f"{index}. {track[1]}", value=f"ID: {track[0]}", inline=False)
     await messagesender(bot, ctx.channel.id, embed=embed)
 
-@bot.command(name="autoplay")
+@bot.command(name="autoplay", aliases=["autodj"])
 async def autoplay(ctx, mode: str):
     await ctx.typing()
     guild_id = ctx.guild.id
