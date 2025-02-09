@@ -740,19 +740,21 @@ async def reboot(ctx):
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
 
-import subprocess
-
 @bot.command(name="dockboot", aliases=["dockerrestart"])
 async def dockboot(ctx):
     print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
     if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Restarting the Docker container...")
         container_id = subprocess.check_output("hostname", text=True).strip()
-        subprocess.run(["docker", "restart", container_id])
-        await bot.close()
+        url = f"http://localhost/v1.41/containers/{container_id}/restart"
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, headers=headers, timeout=5)
+        if response.status_code == 204:
+            await bot.close()
+        else:
+            await messagesender(bot, ctx.channel.id, content=f"Failed to restart container: {response.text}")
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the Docker container.")
-
 
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
