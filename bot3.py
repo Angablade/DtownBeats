@@ -423,15 +423,20 @@ async def playlister(ctx, *, search: str = None):
             playlist_title = await get_youtube_playlist_title(playlist_id)
 
         video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
-        current_ids = set()
+        vidscnt = len(video_ids)
+        vidscrn = 0
+        vidsadd = 0
 
+        current_ids = set()
         scanning_message = await ctx.send("Scanning playlist")
         for video_id in video_ids:
-            await scanning_message.edit(content=f"Scanned: {video_id}")
+            await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})")
+            vidscrn += 1
             if video_id not in current_ids:
                 current_ids.add(video_id)
+                vidsadd += 1
                 await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
-                await scanning_message.edit(content=f"Added: {video_id}!")
+                await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})\nAdded: {video_id}!")
 
         queue_size = server_queues[guild_id].qsize()
         await scanning_message.edit(content=f"Added {queue_size} tracks from the playlist to the queue.")
@@ -742,19 +747,14 @@ async def reboot(ctx):
 
 @bot.command(name="dockboot", aliases=["dockerrestart"])
 async def dockboot(ctx):
-    print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
+    print(f"Requesting ID: {ctx.author.id}\nOwner ID: {BOT_OWNER_ID}")
     if ctx.author.id == BOT_OWNER_ID:
-        await messagesender(bot, ctx.channel.id, content="Restarting the Docker container...")
-        container_id = subprocess.check_output("hostname", text=True).strip()
-        url = f"http://localhost/v1.41/containers/{container_id}/restart"
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, headers=headers, timeout=5)
-        if response.status_code == 204:
-            await bot.close()
-        else:
-            await messagesender(bot, ctx.channel.id, content=f"Failed to restart container: {response.text}")
+        await messagesender(bot, ctx.channel.id, content="Shutting down and restarting")
+        subprocess.Popen(["/bin/bash", "init.sh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os._exit(0)  
     else:
-        await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the Docker container.")
+        await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
+
 
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
