@@ -8,7 +8,6 @@ services:
       - /path/to/lyrics:/app/lyrics
       - /path/to/music:/app/music
       - /path/to/config:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - MUSICBRAINZ_USERAGENT="dtownbeats"
       - MUSICBRAINZ_VERSION="1.1"
