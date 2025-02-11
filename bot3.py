@@ -815,7 +815,7 @@ async def help_command(ctx):
         f"`{ctx.prefix}loop` - Toggle looping for the current song.\n"
         f"`{ctx.prefix}shuffle` - Shuffle the current music queue.\n"
         f"`{ctx.prefix}move <from> <to>` - Move a song in the queue from one position to another.\n"
-        f"`{ctx.prefix}grablist <query> - Grabs a random user-generated playlist based on your query.\n"
+        f"`{ctx.prefix}grablist <query>` - Grabs a random user-generated playlist based on your query.\n"
         f"`{ctx.prefix}history` - Displays the played track history.\n"
         f"`{ctx.prefix}autoplay` - Toggles an alpha autoplay mode that should scrobble play music automatically."
     ), inline=False)
