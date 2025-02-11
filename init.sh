@@ -2,7 +2,7 @@
 
 apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg 
 pip install --upgrade pip
-pip install --no-cache-dir discord.py pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl
+pip install --no-cache-dir discord.py pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy
 python3 -m pip show discord.py
 
 REPO_URLS=("https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master" "https://angablade.com/stuff/dtownbeats")

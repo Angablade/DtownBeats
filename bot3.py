@@ -23,6 +23,7 @@ from lyrics import Lyrics
 from discord.ext import commands
 from discord.ui import View, Button
 from discord import FFmpegPCMAudio, Embed
+from fuzzywuzzy import fuzz
 
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
@@ -165,14 +166,38 @@ async def on_guild_join(guild):
         server_queues[guild.id] = asyncio.Queue()
     print(f"Joined new guild: {guild.name}, initialized queue.")
 
-async def get_related_video(video_id):
+async def get_related_video(video_id, guild_id, retry_count=3):
     url = f"https://www.youtube.com/watch?v={video_id}"
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            html_content = await response.text()
-            match = re.findall(r'"videoId":"([\w-]{11})"', html_content)
-            return match[1] if match else None 
+    for attempt in range(retry_count):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                html_content = await response.text()
+                related_video_ids = re.findall(r'"videoId":"([\w-]{11})"', html_content)
+
+                if not related_video_ids:
+                    return None
+
+                history = track_history.get(guild_id, [])
+
+                def is_duplicate(video_id, video_title):
+                    for hist_id, hist_title in history:
+                        if video_id == hist_id or fuzz.ratio(video_title.lower(), hist_title.lower()) > 85:
+                            return True
+                    return False
+
+                for related_id in related_video_ids:
+                    video_title = await get_youtube_video_title(related_id)
+
+                    if video_title and not is_duplicate(related_id, video_title):
+                        return related_id
+
+                print(f"Retry {attempt + 1}/{retry_count}: No new videos found. Reloading page...")
+                await asyncio.sleep(2)
+
+    print("Failed to find a new related video after 3 attempts. Stopping playback.")
+    return None
+
 
 def is_banned_title(title):
     banned_keywords = [
@@ -299,10 +324,11 @@ async def play_next(ctx, voice_client):
             if autoplay_enabled.get(guild_id, False):
                 last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
                 if last_track:
-                    next_video = await get_related_video(last_track)
+                    next_video = await get_related_video(last_track, guild_id)
                     if next_video:
                         await queue_and_play_next(ctx, guild_id, next_video)
-                        continue 
+                    else:
+                        await messagesender(bot, ctx.channel.id, "Autoplay stopped: No new related videos found.")
             await messagesender(bot, ctx.channel.id, "The queue is empty.")
             await check_empty_channel(ctx)
             break
