@@ -1083,12 +1083,12 @@ async def move_song(ctx, from_pos: int, to_pos: int):
     else:
         await messagesender(bot, ctx.channel.id, content="Invalid positions. Please provide valid track numbers from the queue.")
 
-@bot.command(name="listen")
-async def listen_command(ctx):
+#@bot.command(name="listen")
+#async def listen_command(ctx):
     #await start_listening(ctx)
 
-@bot.command(name="unlisten")
-async def unlisten_command(ctx):
+#@bot.command(name="unlisten")
+#async def unlisten_command(ctx):
     #await stop_listening(ctx)
 
 
