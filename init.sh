@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 
 apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg 
 pip install --upgrade pip
@@ -38,11 +38,11 @@ download_file() {
     local url=$1
     local destination=$2
     if [ ! -f "$destination" ]; then
-        echo "📥 Downloading $destination..."
+        echo "Downloading $destination..."
         wget -q --show-progress -O "$destination" "$url"
-        echo "✅ Downloaded: $destination"
+        echo "Downloaded: $destination"
     else
-        echo "✅ $destination already exists. Skipping download."
+        echo "$destination already exists. Skipping download."
     fi
 }
 
