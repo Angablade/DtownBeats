@@ -4,7 +4,7 @@ apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmp
 
 pip install --upgrade pip
 pip install --no-cache-dir discord.py pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein numpy
-pip install --no-cache-dir coqui-stt
+#pip install --no-cache-dir coqui-stt
 
 REPO_URLS=("https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master" "https://angablade.com/stuff/dtownbeats")
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py" "youtube_pl.py" "voice_utils.py")
