@@ -5,6 +5,7 @@ set -e
 apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full
 
 pip install --upgrade pip
+pip install --no-cache-dir "pybind11>=2.12"
 pip install --no-cache-dir "numpy<2"
 pip install --no-cache-dir discord.py pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs \
     beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein
