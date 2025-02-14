@@ -11,7 +11,6 @@ pip install --no-cache-dir discord.py pyyaml requests yt-dlp asyncio aiohttp mus
     beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein
 
 pip install --no-cache-dir stt
-pip install --no-cache-dir coqui-stt
 
 REPO_URLS=("https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master" "https://angablade.com/stuff/dtownbeats")
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py" "youtube_pl.py" "voice_utils.py")
