@@ -8,6 +8,7 @@ services:
       - /path/to/lyrics:/app/lyrics
       - /path/to/music:/app/music
       - /path/to/config:/app/config
+      - /path/to/models:/app/models
     environment:
       - MUSICBRAINZ_USERAGENT="dtownbeats"
       - MUSICBRAINZ_VERSION="1.1"
@@ -16,5 +17,6 @@ services:
       - EXECUTOR_MAX_WORKERS=10
       - BOT_TOKEN=<YOURBOTTOKEN>
       - QUEUE_PAGE_SIZE=10
+      - HISTORY_PAGE_SIZE=10
       - TIMEOUT_TIME=60
     restart: unless-stopped

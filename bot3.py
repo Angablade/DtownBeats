@@ -13,7 +13,7 @@ import musicbrainzngs
 import shutil
 import subprocess
 
-#from voice_utils import start_listening, stop_listening
+from voice_utils import start_listening, stop_listening
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 from io import BytesIO
@@ -33,6 +33,7 @@ BOT_OWNER_ID = int(os.getenv("BOT_OWNER_ID", 123456789))
 EXECUTOR_MAX_WORKERS = int(os.getenv("EXECUTOR_MAX_WORKERS", "10"))
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_token")
 QUEUE_PAGE_SIZE = int(os.getenv("QUEUE_PAGE_SIZE","10"))
+HISTORY_PAGE_SIZE = int(os.getenv("HISTORY_PAGE_SIZE","10"))
 TIMEOUT_TIME = int(os.getenv("TIMEOUT_TIME", "60"))
 
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
@@ -183,7 +184,7 @@ async def get_related_video(video_id, guild_id, retry_count=3):
 
                 def is_duplicate(video_id, video_title):
                     for hist_id, hist_title in history:
-                        if video_id == hist_id or fuzz.ratio(video_title.lower(), hist_title.lower()) > 85:
+                        if video_id == hist_id or fuzz.ratio(video_title.lower(), hist_title.lower()) > 70:
                             return True
                     return False
 
@@ -785,25 +786,32 @@ async def dockboot(ctx):
 
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
+                                        #[HHMMSS-MMDDYYYY]
     embed = discord.Embed(
-        title=f"DtownBeats - Version 0.2G [114111-09022025]",
+        title=f"DtownBeats - Version 0.3 [044945-14022025]",
         description="🎵 Bringing beats to your server with style!",
         color=discord.Color.dark_blue()
     )
 
     embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
     
+    embed.add_field(name="", value=(""), inline=False)
+
     embed.add_field(
         name="📜 Source Code",
         value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
         inline=False
     )
 
+    embed.add_field(name="", value=(""), inline=False)
+
     embed.add_field(
         name="🐳 Docker Image",
         value="```\ndocker pull angablade/dtownbeats:latest```",
         inline=False
     )
+    
+    embed.add_field(name="", value=(""), inline=False)
 
     embed.set_footer(
         text=f"Created by Angablade",
@@ -818,77 +826,124 @@ async def version(ctx):
 
 @bot.command(name="cmds", aliases=["commands"])
 async def help_command(ctx):
-    """Sends a list of commands in a direct message."""
-    embed = Embed(title="Bot Commands", description="Here is a list of all available commands:", color=discord.Color.blue())
+    """Sends a list of commands in a direct message with a table layout."""
+    embed = Embed(title="📜 Bot Commands", description="Here is a list of all available commands:", color=discord.Color.blue())
 
-    embed.add_field(name="🎵 Music Commands", value=(
-        f"`{ctx.prefix}play <query>` - Play a song or add it to the queue. Supports search, playlists, embeds, shorts, youtube music, and direct url.\n"
-        f"`{ctx.prefix}stop` - Stop the bot and leave the voice channel.\n"
-        f"`{ctx.prefix}pause` - Pause the music.\n"
-        f"`{ctx.prefix}resume` - Resume the paused music.\n"
-        f"`{ctx.prefix}search <query>` - Displays up to a list of 5 playable audio options from youtube.\n"
-        f"`{ctx.prefix}nowplaying` - Show the currently playing song.\n"
-        f"`{ctx.prefix}seek <time>/<percent>` - Seek to a specific time in the currently playing track.\n"
-        f"`{ctx.prefix}volume <0-200>` - Adjust the playback volume (0-200%)."
-    ), inline=False)
-    
-    embed.add_field(name="", value=(""), inline=False)
-    
-    embed.add_field(name="⌚ Queue Commands", value=(
-        f"`{ctx.prefix}queue` - Show the current music queue.\n"
-        f"`{ctx.prefix}skip` - Skip the currently playing song.\n"
-        f"`{ctx.prefix}clear` - Clear the music queue.\n"
-        f"`{ctx.prefix}remove <index>` - Remove a song from the queue by its position.\n"
-        f"`{ctx.prefix}loop` - Toggle looping for the current song.\n"
-        f"`{ctx.prefix}shuffle` - Shuffle the current music queue.\n"
-        f"`{ctx.prefix}move <from> <to>` - Move a song in the queue from one position to another.\n"
-        f"`{ctx.prefix}grablist <query>` - Grabs a random user-generated playlist based on your query.\n"
-        f"`{ctx.prefix}history` - Displays the played track history.\n"
-        f"`{ctx.prefix}autoplay` - Toggles an alpha autoplay mode that should scrobble play music automatically."
-    ), inline=False)
-    
-    embed.add_field(name="", value=(""), inline=False)
-    
-    embed.add_field(name="🔇 Control Commands", value=(
-        f"`{ctx.prefix}mute` - Toggle mute/unmute for the bot.\n"
-        f"`{ctx.prefix}join` - Make the bot join your current voice channel.\n"
-        f"`{ctx.prefix}leave` - Disconnect the bot from the voice channel."
-    ), inline=False)
+    # 🎵 Music Commands
+    embed.add_field(name="🎵 **Music Commands**", value="""
+    **Command**       | **Aliases**       | **Description**
+    ------------------|-------------------|------------------------------------------------
+    play <query>      | None              | Play a song or add it to the queue.
+    stop              | None              | Stop the bot and leave the voice channel.
+    pause             | hold              | Pause the currently playing track.
+    resume            | continue          | Resume the paused track.
+    search <query>    | find              | Show up to 5 YouTube search results.
+    nowplaying        | np, current       | Show details of the current song.
+    seek <time/%>     | None              | Seek to a timestamp or percentage.
+    volume <0-200>    | vol               | Adjust playback volume (0-200%).
+    """, inline=False)
 
-    embed.add_field(name="", value=(""), inline=False)
+    embed.add_field(name="", value="", inline=False)  # Empty space
 
-    embed.add_field(name="📜 Lyrics Commands", value=(
-        f"`{ctx.prefix}lyrics <song>` - Get the lyrics for the specified song. If no song is provided, tries to get the lyrics for the currently playing track."
-    ), inline=False)
+    # ⌚ Queue Commands
+    embed.add_field(name="⌚ **Queue Commands**", value="""
+    **Command**   | **Aliases**  | **Description**
+    --------------|--------------|----------------------------------------
+    queue         | list         | Display the current queue.
+    skip          | next         | Skip the currently playing song.
+    clear         | None         | Clear the queue.
+    remove <#>    | None         | Remove a song from the queue.
+    loop          | repeat       | Toggle looping.
+    shuffle       | None         | Shuffle the queue.
+    move <#> <#>  | None         | Move a song in the queue.
+    grablist <q>  | grabplaylist | Grab a user-generated playlist.
+    history       | played       | Show recently played tracks.
+    autoplay      | autodj       | Toggle autoplay mode.
+    """, inline=False)
 
-    embed.add_field(name="", value=(""), inline=False)
+    embed.add_field(name="", value="", inline=False)  # Empty space
 
-    embed.add_field(name="⚙️ Configuration Commands", value=(
-        f"`{ctx.prefix}setprefix <prefix>` - Set the bot's prefix.\n"
-        f"`{ctx.prefix}setdjrole <role>` - Set the DJ role.\n"
-        f"`{ctx.prefix}setchannel <channel>` - Set the designated command channel."
-    ), inline=False)
+    # 🔇 Control Commands
+    embed.add_field(name="🔇 **Control Commands**", value="""
+    **Command**  | **Aliases** | **Description**
+    ----------|-----------|--------------------------------
+    mute      | quiet     | Toggle mute/unmute.
+    join      | come      | Make the bot join your voice channel.
+    leave     | go        | Disconnect the bot from voice.
+    """, inline=False)
 
-    embed.add_field(name="", value=(""), inline=False)
+    embed.add_field(name="", value="", inline=False)  # Empty space
 
-    embed.add_field(name="📇 Other Commands", value=(
-        f"`{ctx.prefix}version` - Direct messages the version information.\n"
-        f"`{ctx.prefix}sendplox` - Does some nice things some times.\n"
-        f"`{ctx.prefix}commands` - Direct messages this menu."
-    ), inline=False)
+    # 🎤 Voice Commands
+    embed.add_field(name="🎤 **Voice Control Commands**", value="""
+    **Command**       | **Voice Trigger**      | **Description**
+    ------------------|------------------------|----------------------------
+    listen            | Music bot listen       | Enable voice command mode.
+    unlisten          | Music bot unlisten     | Disable voice command mode.
+    play <query>      | Music bot play <q>     | Play a song via voice command.
+    pause             | Music bot pause        | Pause playback.
+    resume            | Music bot resume       | Resume playback.
+    stop              | Music bot stop         | Stop and leave voice.
+    skip              | Music bot skip         | Skip the current song.
+    volume up         | Music bot volume up    | Increase volume.
+    volume down       | Music bot volume down  | Decrease volume.
+    shuffle           | Music bot shuffle      | Shuffle the queue.
+    clear queue       | Music bot clear queue  | Clear the queue.
+    loop              | Music bot loop         | Toggle looping.
+    autoplay on       | Music bot autoplay on  | Enable autoplay mode.
+    autoplay off      | Music bot autoplay off | Disable autoplay mode.
+    leave             | Music bot leave        | Disconnect from voice.
+    """, inline=False)
 
-    embed.add_field(name="", value=(""), inline=False)
+    embed.add_field(name="", value="", inline=False)  # Empty space
 
-    embed.add_field(name="🛠️ Admin Commands", value=(
-        f"`{ctx.prefix}shutdown` - Shut down the bot (owner only).\n"
-        f"`{ctx.prefix}reboot` - Restart the bot (owner only)."
-    ), inline=False)
+    # 📜 Lyrics Commands
+    embed.add_field(name="📜 **Lyrics Commands**", value="""
+    **Command** | **Aliases** | **Description**
+    ------------|-------------|-------------------------------------------
+    lyrics <song> | None    | Fetch lyrics for the specified/current song.
+    """, inline=False)
+
+    embed.add_field(name="", value="", inline=False)  # Empty space
+
+    # ⚙️ Configuration Commands
+    embed.add_field(name="⚙️ **Configuration Commands**", value="""
+    **Command**       | **Aliases**  | **Description**
+    ------------------|--------------|------------------------------------
+    setprefix <p>     | prefix       | Change the bot's prefix.
+    setdjrole <r>     | setrole      | Assign a DJ role.
+    setchannel <c>    | None         | Restrict commands to a channel.
+    """, inline=False)
+
+    embed.add_field(name="", value="", inline=False)  # Empty space
+
+    # 📇 Other Commands
+    embed.add_field(name="📇 **Other Commands**", value="""
+    **Command** | **Aliases** | **Description**
+    ------------|-------------|-------------------------------------------
+    version     | ver         | DM the bot version info.
+    sendplox    | None        | DM the current track as a file.
+    commands    | cmds        | DM this command list.
+    """, inline=False)
+
+    embed.add_field(name="", value="", inline=False)  # Empty space
+
+    # 🛠️ Admin Commands
+    embed.add_field(name="🛠️ **Admin Commands**", value="""
+    **Command**  | **Aliases**        | **Description**
+    ----------|--------------|--------------------------------------
+    shutdown  | die          | Shut down the bot (owner only).
+    reboot    | restart      | Restart the bot (owner only).
+    dockboot  | dockerrestart| Restart Docker container (owner only).
+    """, inline=False)
 
     try:
         await ctx.author.send(embed=embed)
         await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the list of commands. 📬")
     except discord.Forbidden:
         await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
+
+
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
@@ -1163,7 +1218,7 @@ async def history(ctx):
         return
     
     embed = discord.Embed(title="\U0001F3B5 Recently Played Songs", color=discord.Color.blue())
-    for index, track in enumerate(history_list[-5:], start=1):
+    for index, track in enumerate(history_list[-HISTORY_PAGE_SIZE:], start=1):
         embed.add_field(name=f"{index}. {track[1]}", value=f"ID: {track[0]}", inline=False)
     await messagesender(bot, ctx.channel.id, embed=embed)
 
@@ -1288,13 +1343,13 @@ async def on_command_error(ctx, error):
         await ctx.send(f"An error occurred: {error}")
         raise error
 
-#@bot.command(name="listen")
-#async def listen_command(ctx):
-    #await start_listening(ctx)
+@bot.command(name="listen")
+async def listen_command(ctx):
+    await start_listening(ctx)
 
-#@bot.command(name="unlisten")
-#async def unlisten_command(ctx):
-    #await stop_listening(ctx)
+@bot.command(name="unlisten")
+async def unlisten_command(ctx):
+    await stop_listening(ctx)
 
 
 bot.run(BOT_TOKEN)
