@@ -10,6 +10,7 @@ import stt
 from discord import FFmpegPCMAudio
 from discord.ext import commands
 from tempfile import NamedTemporaryFile
+from discord import AudioSink
 
 MODEL_DIR = "models"
 MODEL_FILE = os.path.join(MODEL_DIR, "model.tflite")
@@ -46,91 +47,142 @@ setup_models()
 
 voice_listeners = {}
 
-class VoiceListener:
-    def __init__(self, ctx):
-        self.ctx = ctx
-        self.model = stt.Model(MODEL_FILE)
-        self.model.enableExternalScorer(SCORER_FILE)
+class UserAudioRecorder(AudioSink):
+    """Captures and stores individual users' audio streams."""
+    
+    def __init__(self):
+        self.audio_buffers = {}
 
-    def recognize_audio(self, audio_file):
-        """Process a WAV file and return transcribed text."""
-        with wave.open(audio_file, "rb") as wf:
-            audio = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
-        return self.model.stt(audio)
+    def write(self, data, user):
+        """Store user audio separately and convert OPUS frames to WAV."""
+        if user not in self.audio_buffers:
+            self.audio_buffers[user] = []
 
-    async def capture_audio(self, voice_client):
-        """Records live audio from the Discord call and transcribes it."""
-        with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-            temp_audio_path = temp_audio.name
+        pcm_data = discord.opus.Decoder().decode(data, 960)  
 
-        audio_source = FFmpegPCMAudio(voice_client, executable="ffmpeg", options="-f wav -ar 16000 -ac 1 -")
-        with wave.open(temp_audio_path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(16000)
+        if max(pcm_data) > 500: 
+            self.audio_buffers[user].append(pcm_data)
 
-            while voice_client.is_connected():
-                audio_chunk = await asyncio.to_thread(audio_source.read, 4096)
-                if not audio_chunk:
-                    break
-                wf.writeframes(audio_chunk)
+    def get_audio(self, user):
+        """Retrieve compiled audio for a specific user."""
+        return b''.join(self.audio_buffers.get(user, []))
 
-        return self.recognize_audio(temp_audio_path)
+async def capture_audio(voice_client):
+    """Captures per-user audio and returns transcriptions."""
+    try:
+        recorder = UserAudioRecorder()
+        voice_client.listen(recorder)  
+
+        await asyncio.sleep(5) 
+
+        transcriptions = {}
+        for user, audio_data in recorder.audio_buffers.items():
+            if not audio_data: 
+                continue
+
+            with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+                temp_audio_path = temp_audio.name
+                with wave.open(temp_audio_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(16000)
+                    wf.writeframes(b''.join(audio_data))
+                transcriptions[user] = recognize_audio(temp_audio_path) 
+
+        return transcriptions
+
+    except Exception as e:
+        print(f"⚠️ Error capturing audio: {e}")
+        return {}
+
+
+def recognize_audio(audio_file):
+    """Process a WAV file and return transcribed text."""
+    with wave.open(audio_file, "rb") as wf:
+        audio = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
+    return stt.Model(MODEL_FILE).stt(audio)
 
 async def process_audio(ctx, voice_client):
-    """Continuously listens for commands from the Discord voice call."""
+    """Processes voice input in smaller chunks to reduce CPU usage."""
     listener = VoiceListener(ctx)
 
     while voice_client.is_connected():
         try:
-            text = await listener.capture_audio(voice_client)
-            print(f"🎤 Recognized: {text}")
-            if "music bot" in text.lower():
-                command = text.lower().replace("music bot", "").strip()
+            transcriptions = await capture_audio(voice_client)
+            for user, text in transcriptions.items():
+                print(f"🎤 Recognized ({user}): {text}")
 
-                if command.startswith("play "):
-                    search_term = command[len("play "):]
-                    await ctx.invoke(ctx.bot.get_command("play"), search=search_term)
-                elif command == "volume up":
-                    await ctx.invoke(ctx.bot.get_command("volume"), volume=10)
-                elif command == "volume down":
-                    await ctx.invoke(ctx.bot.get_command("volume"), volume=-10)
-                elif command == "pause":
-                    await ctx.invoke(ctx.bot.get_command("pause"))
-                elif command == "resume":
-                    await ctx.invoke(ctx.bot.get_command("resume"))
-                elif command == "stop":
-                    await ctx.invoke(ctx.bot.get_command("stop"))
-                elif command == "skip":
-                    await ctx.invoke(ctx.bot.get_command("skip"))
-                elif command == "shuffle":
-                    await ctx.invoke(ctx.bot.get_command("shuffle"))
-                elif command == "clear queue":
-                    await ctx.invoke(ctx.bot.get_command("clear"))
-                elif command == "loop":
-                    await ctx.invoke(ctx.bot.get_command("loop"))
-                elif command == "autoplay on":
-                    await ctx.invoke(ctx.bot.get_command("autoplay"), mode="on")
-                elif command == "autoplay off":
-                    await ctx.invoke(ctx.bot.get_command("autoplay"), mode="off")
-                elif command == "leave":
-                    await ctx.invoke(ctx.bot.get_command("leave"))
-                await ctx.send(f"🎤 Recognized command: `{command}`")
+                if len(text) < 4:
+                    continue
+
+                words = text.split()
+                chunk = []
+                for word in words:
+                    chunk.append(word)
+                    if len(chunk) >= 3:
+                        command = " ".join(chunk)
+                        await handle_voice_command(ctx, user, command)
+                        chunk = []
+                        await asyncio.sleep(0.5)
+
+                if chunk:
+                    command = " ".join(chunk)
+                    await handle_voice_command(ctx, user, command)
+
         except Exception as e:
             print(f"⚠️ Error processing audio: {e}")
+
+
+async def handle_voice_command(ctx, user, command):
+    """Executes commands based on transcribed voice input."""
+    command = command.lower().strip()
+    
+    if command.startswith("play "):
+        search_term = command[len("play "):]
+        await ctx.invoke(ctx.bot.get_command("play"), search=search_term)
+    elif command == "volume up":
+        await ctx.invoke(ctx.bot.get_command("volume"), volume=10)
+    elif command == "volume down":
+        await ctx.invoke(ctx.bot.get_command("volume"), volume=-10)
+    elif command == "pause":
+        await ctx.invoke(ctx.bot.get_command("pause"))
+    elif command == "resume":
+        await ctx.invoke(ctx.bot.get_command("resume"))
+    elif command == "stop":
+        await ctx.invoke(ctx.bot.get_command("stop"))
+    elif command == "skip":
+        await ctx.invoke(ctx.bot.get_command("skip"))
+    elif command == "shuffle":
+        await ctx.invoke(ctx.bot.get_command("shuffle"))
+    elif command == "clear queue":
+        await ctx.invoke(ctx.bot.get_command("clear"))
+    elif command == "loop":
+        await ctx.invoke(ctx.bot.get_command("loop"))
+    elif command == "autoplay on":
+        await ctx.invoke(ctx.bot.get_command("autoplay"), mode="on")
+    elif command == "autoplay off":
+        await ctx.invoke(ctx.bot.get_command("autoplay"), mode="off")
+    elif command == "leave":
+        await ctx.invoke(ctx.bot.get_command("leave"))
+    
+    await ctx.send(f"🎤 `{user}` said: `{command}`")
+
+
 async def start_listening(ctx):
-    """Start voice recognition in a Discord voice call."""
-    if ctx.guild.id in voice_listeners:
-        await ctx.send("🎤 Already listening!")
-        return
+    """Starts voice recognition, even if already connected."""
+    guild_id = ctx.guild.id
 
-    if not ctx.author.voice or not ctx.author.voice.channel:
-        await ctx.send("❌ You must be in a voice channel.")
-        return
+    if guild_id in voice_listeners:
+        await ctx.send("🎤 Already connected! Starting voice recognition now...")
+        voice_client = voice_listeners[guild_id]
+    else:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send("❌ You must be in a voice channel.")
+            return
 
-    voice_channel = ctx.author.voice.channel
-    voice_client = await voice_channel.connect()
-    voice_listeners[ctx.guild.id] = voice_client
+        voice_channel = ctx.author.voice.channel
+        voice_client = await voice_channel.connect()
+        voice_listeners[guild_id] = voice_client
 
     await ctx.send("🎤 Listening for voice commands... Say 'Music bot <command>'.")
     await process_audio(ctx, voice_client)
