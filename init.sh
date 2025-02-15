@@ -4,13 +4,13 @@ set -e
 
 apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full apt-utils libopus-dev
 
-pip install --root-user-action --upgrade pip
-pip install --root-user-action --no-cache-dir "pybind11>=2.12"
-pip install --root-user-action --no-cache-dir "numpy<2"
-pip install --root-user-action --no-cache-dir py-cord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs \
+pip install --upgrade 'ignore' --upgrade pip
+pip install --upgrade 'ignore' --no-cache-dir "pybind11>=2.12"
+pip install --upgrade 'ignore' --no-cache-dir "numpy<2"
+pip install --upgrade 'ignore' --no-cache-dir py-cord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs \
     beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein
 
-pip install --root-user-action --no-cache-dir stt
+pip install --upgrade 'ignore' --no-cache-dir stt
 
 REPO_URLS=("https://raw.githubusercontent.com/Angablade/DtownBeats/refs/heads/master" "https://angablade.com/stuff/dtownbeats")
 FILES=("bot3.py" "lyrics.py" "youtube_mp3.py" "youtube_pl.py" "voice_utils.py")

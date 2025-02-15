@@ -316,37 +316,37 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
     return video_ids
         
 async def play_next(ctx, voice_client):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if autoplay_enabled.get(guild_id, False) and bot.intentional_disconnections.get(guild_id, False):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if autoplay_enabled.get(guild_id, False) and bot.intentional_disconnections.get(guild_id, False):
+            return
 
-    while not queue_paused.get(guild_id, False):
-        if server_queues[guild_id].empty():
-            if autoplay_enabled.get(guild_id, False):
-                last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
-                if last_track:
-                    next_video = await get_related_video(last_track, guild_id)
-                    if next_video:
-                        await queue_and_play_next(ctx, guild_id, next_video)
-                    else:
-                        await messagesender(bot, ctx.channel.id, "Autoplay stopped: No new related videos found.")
-            await messagesender(bot, ctx.channel.id, "The queue is empty.")
-            await check_empty_channel(ctx)
-            break
+        while not queue_paused.get(guild_id, False):
+            if server_queues[guild_id].empty():
+                if autoplay_enabled.get(guild_id, False):
+                    last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
+                    if last_track:
+                        next_video = await get_related_video(last_track, guild_id)
+                        if next_video:
+                            await queue_and_play_next(ctx, guild_id, next_video)
+                        else:
+                            await messagesender(bot, ctx.channel.id, "Autoplay stopped: No new related videos found.")
+                await messagesender(bot, ctx.channel.id, "The queue is empty.")
+                await check_empty_channel(ctx)
+                break
 
-        videoinfo = await server_queues[guild_id].get()
-        video_id, video_title = videoinfo[0], videoinfo[1]
+            videoinfo = await server_queues[guild_id].get()
+            video_id, video_title = videoinfo[0], videoinfo[1]
 
-        audio_file = await download_audio(video_id)
-        if not audio_file:
-            await messagesender(bot, ctx.channel.id, "Failed to download the track. Skipping...")
-            continue 
+            audio_file = await download_audio(video_id)
+            if not audio_file:
+                await messagesender(bot, ctx.channel.id, "Failed to download the track. Skipping...")
+                continue 
 
-        add_track_to_history(guild_id, video_id, video_title)
-        await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
+            add_track_to_history(guild_id, video_id, video_title)
+            await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
 
-    bot.intentional_disconnections[guild_id] = False
+        bot.intentional_disconnections[guild_id] = False
 
 
 async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id):
@@ -418,108 +418,108 @@ async def setchannel(ctx, channel: discord.TextChannel):
 
 @bot.command(name="grablist", aliases=["grabplaylist"])
 async def playlister(ctx, *, search: str = None):
-    await ctx.typing()
-    guild_id = ctx.guild.id
+    await with ctx.typing():
+        guild_id = ctx.guild.id
 
-    if not await check_perms(ctx, guild_id):
-        return
-    
-    if guild_id not in server_queues:
-        server_queues[guild_id] = asyncio.Queue()
-        current_tracks[guild_id] = {"current_track": None, "is_looping": False}
-
-    if search:
-        playlists_json = await grab_youtube_pl(search)
-        playlists = json.loads(playlists_json) 
-
-        if not playlists:
-            await messagesender(bot, ctx.channel.id, "No playlists found for query.")
+        if not await check_perms(ctx, guild_id):
             return
+    
+        if guild_id not in server_queues:
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
 
-        index = 0
-        playlist_id = playlists[index]
-        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-        playlist_title = await get_youtube_playlist_title(playlist_id)
+        if search:
+            playlists_json = await grab_youtube_pl(search)
+            playlists = json.loads(playlists_json) 
 
-        while "podcast" in playlist_title.lower():
-            index += 1
-            if index >= len(playlists):
-                await messagesender(bot, ctx.channel.id, "No suitable playlists found (all contained 'podcast').")
+            if not playlists:
+                await messagesender(bot, ctx.channel.id, "No playlists found for query.")
                 return
+
+            index = 0
             playlist_id = playlists[index]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             playlist_title = await get_youtube_playlist_title(playlist_id)
 
-        video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
-        vidscnt = len(video_ids)
-        vidscrn = 0
-        vidsadd = 0
+            while "podcast" in playlist_title.lower():
+                index += 1
+                if index >= len(playlists):
+                    await messagesender(bot, ctx.channel.id, "No suitable playlists found (all contained 'podcast').")
+                    return
+                playlist_id = playlists[index]
+                playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+                playlist_title = await get_youtube_playlist_title(playlist_id)
 
-        current_ids = set()
-        scanning_message = await ctx.send("Scanning playlist")
-        for video_id in video_ids:
-            await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})")
-            vidscrn += 1
-            if video_id not in current_ids:
-                current_ids.add(video_id)
-                vidsadd += 1
-                await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
-                await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})\nAdded: {video_id}!")
-
-        queue_size = server_queues[guild_id].qsize()
-        await scanning_message.edit(content=f"Added {queue_size} tracks from the playlist to the queue.")
-
-        if ctx.voice_client is None:
-            channel = ctx.author.voice.channel if ctx.author.voice else None
-            if channel:
-                await channel.connect()
-            else:
-                await scanning_message.edit(content=f"You are not in a voice channel.")
-                return
-
-        if not ctx.voice_client.is_playing():
-            await play_next(ctx, ctx.voice_client)
-    else:
-        await messagesender(bot, ctx.channel.id, "No search query entered!")
-
-@bot.command(name="play")
-async def play(ctx, *, search: str = None):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    
-    if not await check_perms(ctx, guild_id):
-        return
-
-    if not server_queues.get(guild_id):
-        server_queues[guild_id] = asyncio.Queue()
-        current_tracks[guild_id] = {"current_track": None, "is_looping": False}
-
-    await handle_voice_connection(ctx)
-    
-    if search:
-        if "playlist" in search and "list=" in search:
-            playlist_id = search.split("list=")[-1]
-            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
-            current_ids = set() 
+            vidscnt = len(video_ids)
+            vidscrn = 0
+            vidsadd = 0
 
-            scanning_message = await ctx.send(f"Scanning playlist")
+            current_ids = set()
+            scanning_message = await ctx.send("Scanning playlist")
             for video_id in video_ids:
-                await scanning_message.edit(content=f"Scanned: {video_id}")
+                await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})")
+                vidscrn += 1
                 if video_id not in current_ids:
                     current_ids.add(video_id)
+                    vidsadd += 1
                     await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
-                    await scanning_message.edit(content=f"added: {video_id}!")
+                    await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})\nAdded: {video_id}!")
 
-            await messagesender(bot, ctx.channel.id, f"Added {server_queues[guild_id].qsize()} tracks from the playlist to the queue.")
+            queue_size = server_queues[guild_id].qsize()
+            await scanning_message.edit(content=f"Added {queue_size} tracks from the playlist to the queue.")
+
+            if ctx.voice_client is None:
+                channel = ctx.author.voice.channel if ctx.author.voice else None
+                if channel:
+                    await channel.connect()
+                else:
+                    await scanning_message.edit(content=f"You are not in a voice channel.")
+                    return
+
             if not ctx.voice_client.is_playing():
                 await play_next(ctx, ctx.voice_client)
         else:
-            video_id = await fetch_video_id(ctx, search)
-            if video_id:
-                await queue_and_play_next(ctx, guild_id, video_id)
+            await messagesender(bot, ctx.channel.id, "No search query entered!")
+
+@bot.command(name="play")
+async def play(ctx, *, search: str = None):
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+    
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+    
+        if search:
+            if "playlist" in search and "list=" in search:
+                playlist_id = search.split("list=")[-1]
+                playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+                video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
+                current_ids = set() 
+
+                scanning_message = await ctx.send(f"Scanning playlist")
+                for video_id in video_ids:
+                    await scanning_message.edit(content=f"Scanned: {video_id}")
+                    if video_id not in current_ids:
+                        current_ids.add(video_id)
+                        await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
+                        await scanning_message.edit(content=f"added: {video_id}!")
+
+                await messagesender(bot, ctx.channel.id, f"Added {server_queues[guild_id].qsize()} tracks from the playlist to the queue.")
+                if not ctx.voice_client.is_playing():
+                    await play_next(ctx, ctx.voice_client)
             else:
-                await messagesender(bot, ctx.channel.id, content="Failed to find the song.")
+                video_id = await fetch_video_id(ctx, search)
+                if video_id:
+                    await queue_and_play_next(ctx, guild_id, video_id)
+                else:
+                    await messagesender(bot, ctx.channel.id, content="Failed to find the song.")
 
 async def handle_voice_connection(ctx):
     guild_id = ctx.guild.id
@@ -600,160 +600,160 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str):
 
 @bot.command(name="skip", aliases=["next"])
 async def skip(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if ctx.voice_client and ctx.voice_client.is_playing():
-        ctx.voice_client.stop()
-        await messagesender(bot, ctx.channel.id, content="Skipped the current track.")
+        if ctx.voice_client and ctx.voice_client.is_playing():
+            ctx.voice_client.stop()
+            await messagesender(bot, ctx.channel.id, content="Skipped the current track.")
 
 @bot.command(name="stop")
 async def stop(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if ctx.voice_client:
-        bot.intentional_disconnections[guild_id] = True
-        await ctx.voice_client.disconnect()
-        server_queues[guild_id] = asyncio.Queue()
-        current_tracks[guild_id] = {"current_track": None, "is_looping": False}
-        await messagesender(bot, ctx.channel.id, content="Stopped the bot and left the voice channel.")
+        if ctx.voice_client:
+            bot.intentional_disconnections[guild_id] = True
+            await ctx.voice_client.disconnect()
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+            await messagesender(bot, ctx.channel.id, content="Stopped the bot and left the voice channel.")
 
 @bot.command(name="pause", aliases=["hold"])
 async def pause(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if ctx.voice_client and ctx.voice_client.is_playing():
-        ctx.voice_client.pause()
-        queue_paused[guild_id] = True
-        await messagesender(bot, ctx.channel.id, content="Paused the music")
+        if ctx.voice_client and ctx.voice_client.is_playing():
+            ctx.voice_client.pause()
+            queue_paused[guild_id] = True
+            await messagesender(bot, ctx.channel.id, content="Paused the music")
 
 @bot.command(name="resume", aliases=["continue"])
 async def resume(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if ctx.voice_client and ctx.voice_client.is_paused():
-        ctx.voice_client.resume()
-        queue_paused[guild_id] = False
-        await messagesender(bot, ctx.channel.id, content="Resumed the music")
+        if ctx.voice_client and ctx.voice_client.is_paused():
+            ctx.voice_client.resume()
+            queue_paused[guild_id] = False
+            await messagesender(bot, ctx.channel.id, content="Resumed the music")
 
 @bot.command(name="queue", aliases=["list"])
 async def show_queue(ctx, page: int = 1):
-    await ctx.typing()
-    guild_id = ctx.guild.id
+    await with ctx.typing():
+        guild_id = ctx.guild.id
 
-    if not server_queues.get(guild_id) or server_queues[guild_id].empty():
-        await messagesender(bot, ctx.channel.id, content="The queue is empty.")
-        return
+        if not server_queues.get(guild_id) or server_queues[guild_id].empty():
+            await messagesender(bot, ctx.channel.id, content="The queue is empty.")
+            return
 
-    queue = list(server_queues[guild_id]._queue)
+        queue = list(server_queues[guild_id]._queue)
     
-    items_per_page = QUEUE_PAGE_SIZE
-    total_pages = (len(queue) + items_per_page - 1) // items_per_page
+        items_per_page = QUEUE_PAGE_SIZE
+        total_pages = (len(queue) + items_per_page - 1) // items_per_page
     
-    if page < 1 or page > total_pages:
-        await messagesender(bot, ctx.channel.id, f"Invalid page number. Please enter a number between 1 and {total_pages}.")
-        return
+        if page < 1 or page > total_pages:
+            await messagesender(bot, ctx.channel.id, f"Invalid page number. Please enter a number between 1 and {total_pages}.")
+            return
 
-    start_index = (page - 1) * items_per_page
-    end_index = min(start_index + items_per_page, len(queue))
+        start_index = (page - 1) * items_per_page
+        end_index = min(start_index + items_per_page, len(queue))
     
-    queue_slice = queue[start_index:end_index]
-    embed = discord.Embed(title=f"Music Queue (Page {page} of {total_pages})", color=discord.Color.blue())
+        queue_slice = queue[start_index:end_index]
+        embed = discord.Embed(title=f"Music Queue (Page {page} of {total_pages})", color=discord.Color.blue())
     
-    for index, item in enumerate(queue_slice, start=start_index + 1):
-        try:
-            video_id = ''.join(item[:1]) 
-            video_title = ''.join(item[1:])  
-            embed.add_field(name=f"{index}. {video_id}", value=video_title, inline=False)
-        except:
-            print("Something was borked.")
-    await messagesender(bot, ctx.channel.id, embed=embed)
+        for index, item in enumerate(queue_slice, start=start_index + 1):
+            try:
+                video_id = ''.join(item[:1]) 
+                video_title = ''.join(item[1:])  
+                embed.add_field(name=f"{index}. {video_id}", value=video_title, inline=False)
+            except:
+                print("Something was borked.")
+        await messagesender(bot, ctx.channel.id, embed=embed)
 
 @bot.command(name="search", aliases=["find"])
 async def search(ctx, *, query: str):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
     
-    ydl_opts = {"default_search": "ytsearch5", "quiet": True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(query, download=False)
-            results = info['entries']
+        ydl_opts = {"default_search": "ytsearch5", "quiet": True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(query, download=False)
+                results = info['entries']
             
-            if not results:
-                await messagesender(bot, ctx.channel.id, content="No search results found.")
-                return
+                if not results:
+                    await messagesender(bot, ctx.channel.id, content="No search results found.")
+                    return
             
-            embed = discord.Embed(title=f"Search Results: {query}", color=discord.Color.green())
-            for entry in results[:5]:
-                video_id = entry['id']
-                video_title = entry['title']
+                embed = discord.Embed(title=f"Search Results: {query}", color=discord.Color.green())
+                for entry in results[:5]:
+                    video_id = entry['id']
+                    video_title = entry['title']
                 
-                embed.add_field(name=video_title, value=f"```{ctx.prefix}play {video_id}```", inline=False)
-            await messagesender(bot, ctx.channel.id, embed=embed)
+                    embed.add_field(name=video_title, value=f"```{ctx.prefix}play {video_id}```", inline=False)
+                await messagesender(bot, ctx.channel.id, embed=embed)
         
-        except Exception as e:
-            await messagesender(bot, ctx.channel.id, f"Failed to search: {e}")
+            except Exception as e:
+                await messagesender(bot, ctx.channel.id, f"Failed to search: {e}")
 
 @bot.command(name="clear")
 async def clear(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if server_queues.get(guild_id):
-        server_queues[guild_id]._queue.clear()
-    await messagesender(bot, ctx.channel.id, content="Cleared the queue.")
+        if server_queues.get(guild_id):
+            server_queues[guild_id]._queue.clear()
+        await messagesender(bot, ctx.channel.id, content="Cleared the queue.")
 
 @bot.command(name="remove")
 async def remove(ctx, index: int):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    try:
-        removed = server_queues[guild_id]._queue.pop(index - 1)
-        await messagesender(bot, ctx.channel.id, f"Removed track {removed} from the queue.")
-    except IndexError:
-        await messagesender(bot, ctx.channel.id, content="Invalid index.")
+        try:
+            removed = server_queues[guild_id]._queue.pop(index - 1)
+            await messagesender(bot, ctx.channel.id, f"Removed track {removed} from the queue.")
+        except IndexError:
+            await messagesender(bot, ctx.channel.id, content="Invalid index.")
 
 @bot.command(name="loop", aliases=["repeat"])
 async def loop(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    current_tracks[guild_id]["is_looping"] = not current_tracks[guild_id].get("is_looping", False)
-    await messagesender(bot, ctx.channel.id, content="Looping " + ("enabled." if current_tracks[guild_id]["is_looping"] else "disabled."))
+        current_tracks[guild_id]["is_looping"] = not current_tracks[guild_id].get("is_looping", False)
+        await messagesender(bot, ctx.channel.id, content="Looping " + ("enabled." if current_tracks[guild_id]["is_looping"] else "disabled."))
 
 @bot.command(name="nowplaying", aliases=["current","currentsong","playing"])
 async def nowplaying(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    current_track = current_tracks.get(guild_id, {}).get("current_track")
-    if current_track:
-        await messagesender(bot, ctx.channel.id, f"Currently playing: {''.join(current_track[1:])}")
-    else:
-        await messagesender(bot, ctx.channel.id, content="No track is currently playing.")
+        current_track = current_tracks.get(guild_id, {}).get("current_track")
+        if current_track:
+            await messagesender(bot, ctx.channel.id, f"Currently playing: {''.join(current_track[1:])}")
+        else:
+            await messagesender(bot, ctx.channel.id, content="No track is currently playing.")
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):
@@ -786,329 +786,331 @@ async def dockboot(ctx):
 
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
-                                        #[HHMMSS-MMDDYYYY]
-    embed = discord.Embed(
-        title=f"DtownBeats - Version 0.3 [044945-14022025]",
-        description="🎵 Bringing beats to your server with style!",
-        color=discord.Color.dark_blue()
-    )
+    await with ctx.typing():
+                                            #[HHMMSS-MMDDYYYY]
+        embed = discord.Embed(
+            title=f"DtownBeats - Version 0.3 [044945-14022025]",
+            description="🎵 Bringing beats to your server with style!",
+            color=discord.Color.dark_blue()
+        )
 
-    embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
     
-    embed.add_field(name="", value=(""), inline=False)
+        embed.add_field(name="", value=(""), inline=False)
 
-    embed.add_field(
-        name="📜 Source Code",
-        value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
-        inline=False
-    )
+        embed.add_field(
+            name="📜 Source Code",
+            value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
+            inline=False
+        )
 
-    embed.add_field(name="", value=(""), inline=False)
+        embed.add_field(name="", value=(""), inline=False)
 
-    embed.add_field(
-        name="🐳 Docker Image",
-        value="```\ndocker pull angablade/dtownbeats:latest```",
-        inline=False
-    )
+        embed.add_field(
+            name="🐳 Docker Image",
+            value="```\ndocker pull angablade/dtownbeats:latest```",
+            inline=False
+        )
     
-    embed.add_field(name="", value=(""), inline=False)
+        embed.add_field(name="", value=(""), inline=False)
 
-    embed.set_footer(
-        text=f"Created by Angablade",
-        icon_url="https://img.angablade.com/ab-w.png"
-    )
+        embed.set_footer(
+            text=f"Created by Angablade",
+            icon_url="https://img.angablade.com/ab-w.png"
+        )
 
-    try:
-        await ctx.author.send(embed=embed)
-        await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the bot version. 📬")
-    except discord.Forbidden:
-        await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
+        try:
+            await ctx.author.send(embed=embed)
+            await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the bot version. 📬")
+        except discord.Forbidden:
+            await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
 
 @bot.command(name="cmds", aliases=["commands"])
 async def help_command(ctx):
-    """Sends a list of commands in a direct message with a table layout."""
-    embed = Embed(title="📜 Bot Commands", description="Here is a list of all available commands:", color=discord.Color.blue())
+    await with ctx.typing():
+        """Sends a list of commands in a direct message with a table layout."""
+        embed = Embed(title="📜 Bot Commands", description="Here is a list of all available commands:", color=discord.Color.blue())
 
-    # 🎵 Music Commands
-    embed.add_field(name="🎵 **Music Commands**", value="""
-    **Command**       | **Aliases**       | **Description**
-    ------------------|-------------------|------------------------------------------------
-    play <query>      | None              | Play a song or add it to the queue.
-    stop              | None              | Stop the bot and leave the voice channel.
-    pause             | hold              | Pause the currently playing track.
-    resume            | continue          | Resume the paused track.
-    search <query>    | find              | Show up to 5 YouTube search results.
-    nowplaying        | np, current       | Show details of the current song.
-    seek <time/%>     | None              | Seek to a timestamp or percentage.
-    volume <0-200>    | vol               | Adjust playback volume (0-200%).
-    """, inline=False)
+        # 🎵 Music Commands
+        embed.add_field(name="🎵 **Music Commands**", value="""
+        **Command**       | **Aliases**       | **Description**
+        ------------------|-------------------|------------------------------------------------
+        play <query>      | None              | Play a song or add it to the queue.
+        stop              | None              | Stop the bot and leave the voice channel.
+        pause             | hold              | Pause the currently playing track.
+        resume            | continue          | Resume the paused track.
+        search <query>    | find              | Show up to 5 YouTube search results.
+        nowplaying        | np, current       | Show details of the current song.
+        seek <time/%>     | None              | Seek to a timestamp or percentage.
+        volume <0-200>    | vol               | Adjust playback volume (0-200%).
+        """, inline=False)
 
-    embed.add_field(name="", value="", inline=False)  # Empty space
+        embed.add_field(name="", value="", inline=False)  # Empty space
 
-    # ⌚ Queue Commands
-    embed.add_field(name="⌚ **Queue Commands**", value="""
-    **Command**   | **Aliases**  | **Description**
-    --------------|--------------|----------------------------------------
-    queue         | list         | Display the current queue.
-    skip          | next         | Skip the currently playing song.
-    clear         | None         | Clear the queue.
-    remove <#>    | None         | Remove a song from the queue.
-    loop          | repeat       | Toggle looping.
-    shuffle       | None         | Shuffle the queue.
-    move <#> <#>  | None         | Move a song in the queue.
-    grablist <q>  | grabplaylist | Grab a user-generated playlist.
-    history       | played       | Show recently played tracks.
-    autoplay      | autodj       | Toggle autoplay mode.
-    """, inline=False)
+        # ⌚ Queue Commands
+        embed.add_field(name="⌚ **Queue Commands**", value="""
+        **Command**   | **Aliases**  | **Description**
+        --------------|--------------|----------------------------------------
+        queue         | list         | Display the current queue.
+        skip          | next         | Skip the currently playing song.
+        clear         | None         | Clear the queue.
+        remove <#>    | None         | Remove a song from the queue.
+        loop          | repeat       | Toggle looping.
+        shuffle       | None         | Shuffle the queue.
+        move <#> <#>  | None         | Move a song in the queue.
+        grablist <q>  | grabplaylist | Grab a user-generated playlist.
+        history       | played       | Show recently played tracks.
+        autoplay      | autodj       | Toggle autoplay mode.
+        """, inline=False)
 
-    embed.add_field(name="", value="", inline=False)  # Empty space
+        embed.add_field(name="", value="", inline=False)  # Empty space
 
-    # 🔇 Control Commands
-    embed.add_field(name="🔇 **Control Commands**", value="""
-    **Command**  | **Aliases** | **Description**
-    ----------|-----------|--------------------------------
-    mute      | quiet     | Toggle mute/unmute.
-    join      | come      | Make the bot join your voice channel.
-    leave     | go        | Disconnect the bot from voice.
-    """, inline=False)
+        # 🔇 Control Commands
+        embed.add_field(name="🔇 **Control Commands**", value="""
+        **Command**  | **Aliases** | **Description**
+        ----------|-----------|--------------------------------
+        mute      | quiet     | Toggle mute/unmute.
+        join      | come      | Make the bot join your voice channel.
+        leave     | go        | Disconnect the bot from voice.
+        """, inline=False)
 
-    embed.add_field(name="", value="", inline=False)  # Empty space
+        embed.add_field(name="", value="", inline=False)  # Empty space
 
-    # 🎤 Voice Commands
-    embed.add_field(name="🎤 **Voice Control Commands**", value="""
-    **Command**       | **Voice Trigger**      | **Description**
-    ------------------|------------------------|----------------------------
-    listen            | Music bot listen       | Enable voice command mode.
-    unlisten          | Music bot unlisten     | Disable voice command mode.
-    play <query>      | Music bot play <q>     | Play a song via voice command.
-    pause             | Music bot pause        | Pause playback.
-    resume            | Music bot resume       | Resume playback.
-    stop              | Music bot stop         | Stop and leave voice.
-    skip              | Music bot skip         | Skip the current song.
-    volume up         | Music bot volume up    | Increase volume.
-    volume down       | Music bot volume down  | Decrease volume.
-    shuffle           | Music bot shuffle      | Shuffle the queue.
-    clear queue       | Music bot clear queue  | Clear the queue.
-    loop              | Music bot loop         | Toggle looping.
-    autoplay on       | Music bot autoplay on  | Enable autoplay mode.
-    autoplay off      | Music bot autoplay off | Disable autoplay mode.
-    leave             | Music bot leave        | Disconnect from voice.
-    """, inline=False)
+        # 🎤 Voice Commands
+        embed.add_field(name="🎤 **Voice Control Commands**", value="""
+        **Command**       | **Voice Trigger**      | **Description**
+        ------------------|------------------------|----------------------------
+        listen            | Music bot listen       | Enable voice command mode.
+        unlisten          | Music bot unlisten     | Disable voice command mode.
+        play <query>      | Music bot play <q>     | Play a song via voice command.
+        pause             | Music bot pause        | Pause playback.
+        resume            | Music bot resume       | Resume playback.
+        stop              | Music bot stop         | Stop and leave voice.
+        skip              | Music bot skip         | Skip the current song.
+        volume up         | Music bot volume up    | Increase volume.
+        volume down       | Music bot volume down  | Decrease volume.
+        shuffle           | Music bot shuffle      | Shuffle the queue.
+        clear queue       | Music bot clear queue  | Clear the queue.
+        loop              | Music bot loop         | Toggle looping.
+        autoplay on       | Music bot autoplay on  | Enable autoplay mode.
+        autoplay off      | Music bot autoplay off | Disable autoplay mode.
+        leave             | Music bot leave        | Disconnect from voice.
+        """, inline=False)
 
-    embed.add_field(name="", value="", inline=False)  # Empty space
+        embed.add_field(name="", value="", inline=False)  # Empty space
 
-    # 📜 Lyrics Commands
-    embed.add_field(name="📜 **Lyrics Commands**", value="""
-    **Command** | **Aliases** | **Description**
-    ------------|-------------|-------------------------------------------
-    lyrics <song> | None    | Fetch lyrics for the specified/current song.
-    """, inline=False)
+        # 📜 Lyrics Commands
+        embed.add_field(name="📜 **Lyrics Commands**", value="""
+        **Command** | **Aliases** | **Description**
+        ------------|-------------|-------------------------------------------
+        lyrics <song> | None    | Fetch lyrics for the specified/current song.
+        """, inline=False)
 
-    embed.add_field(name="", value="", inline=False)  # Empty space
+        embed.add_field(name="", value="", inline=False)  # Empty space
 
-    # ⚙️ Configuration Commands
-    embed.add_field(name="⚙️ **Configuration Commands**", value="""
-    **Command**       | **Aliases**  | **Description**
-    ------------------|--------------|------------------------------------
-    setprefix <p>     | prefix       | Change the bot's prefix.
-    setdjrole <r>     | setrole      | Assign a DJ role.
-    setchannel <c>    | None         | Restrict commands to a channel.
-    """, inline=False)
+        # ⚙️ Configuration Commands
+        embed.add_field(name="⚙️ **Configuration Commands**", value="""
+        **Command**       | **Aliases**  | **Description**
+        ------------------|--------------|------------------------------------
+        setprefix <p>     | prefix       | Change the bot's prefix.
+        setdjrole <r>     | setrole      | Assign a DJ role.
+        setchannel <c>    | None         | Restrict commands to a channel.
+        """, inline=False)
 
-    embed.add_field(name="", value="", inline=False)  # Empty space
+        embed.add_field(name="", value="", inline=False)  # Empty space
 
-    # 📇 Other Commands
-    embed.add_field(name="📇 **Other Commands**", value="""
-    **Command** | **Aliases** | **Description**
-    ------------|-------------|-------------------------------------------
-    version     | ver         | DM the bot version info.
-    sendplox    | None        | DM the current track as a file.
-    commands    | cmds        | DM this command list.
-    """, inline=False)
+        # 📇 Other Commands
+        embed.add_field(name="📇 **Other Commands**", value="""
+        **Command** | **Aliases** | **Description**
+        ------------|-------------|-------------------------------------------
+        version     | ver         | DM the bot version info.
+        sendplox    | None        | DM the current track as a file.
+        commands    | cmds        | DM this command list.
+        """, inline=False)
 
-    embed.add_field(name="", value="", inline=False)  # Empty space
+        embed.add_field(name="", value="", inline=False)  # Empty space
 
-    # 🛠️ Admin Commands
-    embed.add_field(name="🛠️ **Admin Commands**", value="""
-    **Command**  | **Aliases**        | **Description**
-    ----------|--------------|--------------------------------------
-    shutdown  | die          | Shut down the bot (owner only).
-    reboot    | restart      | Restart the bot (owner only).
-    dockboot  | dockerrestart| Restart Docker container (owner only).
-    """, inline=False)
+        # 🛠️ Admin Commands
+        embed.add_field(name="🛠️ **Admin Commands**", value="""
+        **Command**  | **Aliases**        | **Description**
+        ----------|--------------|--------------------------------------
+        shutdown  | die          | Shut down the bot (owner only).
+        reboot    | restart      | Restart the bot (owner only).
+        dockboot  | dockerrestart| Restart Docker container (owner only).
+        """, inline=False)
 
-    try:
-        await ctx.author.send(embed=embed)
-        await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the list of commands. 📬")
-    except discord.Forbidden:
-        await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
+        try:
+            await ctx.author.send(embed=embed)
+            await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the list of commands. 📬")
+        except discord.Forbidden:
+            await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
 
 
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
-    await ctx.typing()
-    guild_id = ctx.guild.id
+    await with ctx.typing():
+        guild_id = ctx.guild.id
     
-    if not await check_perms(ctx, guild_id):
-        return
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if not ctx.voice_client or not ctx.voice_client.is_playing():
-        await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
-        return
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
+            return
 
-    current_track = current_tracks.get(guild_id, {}).get("current_track")
-    if not current_track:
-        await messagesender(bot, ctx.channel.id, content="There's no track information available to seek.")
-        return
+        current_track = current_tracks.get(guild_id, {}).get("current_track")
+        if not current_track:
+            await messagesender(bot, ctx.channel.id, content="There's no track information available to seek.")
+            return
     
-    video_id = current_track[0]
-    audio_file = f"music/{video_id}.mp3"
-    if not os.path.exists(audio_file):
-        await messagesender(bot, ctx.channel.id, content="Audio file not found for seeking.")
-        return
-    def get_audio_duration(file_path):
+        video_id = current_track[0]
+        audio_file = f"music/{video_id}.mp3"
+        if not os.path.exists(audio_file):
+            await messagesender(bot, ctx.channel.id, content="Audio file not found for seeking.")
+            return
+        def get_audio_duration(file_path):
+            try:
+                result = subprocess.run(
+                    ["ffmpeg", "-i", file_path, "-f", "null", "-"],
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                duration_line = [line for line in result.stderr.split("\n") if "Duration" in line]
+                if duration_line:
+                    time_str = duration_line[0].split(",")[0].split("Duration:")[1].strip()
+                    h, m, s = map(float, time_str.split(":"))
+                    return int(h * 3600 + m * 60 + s)
+            except Exception as e:
+                print(f"Error getting duration: {e}")
+            return None
+
+        duration = get_audio_duration(audio_file)
+        if not duration:
+            await messagesender(bot, ctx.channel.id, content="Could not determine audio duration.")
+            return
+
         try:
-            result = subprocess.run(
-                ["ffmpeg", "-i", file_path, "-f", "null", "-"],
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            duration_line = [line for line in result.stderr.split("\n") if "Duration" in line]
-            if duration_line:
-                time_str = duration_line[0].split(",")[0].split("Duration:")[1].strip()
-                h, m, s = map(float, time_str.split(":"))
-                return int(h * 3600 + m * 60 + s)
-        except Exception as e:
-            print(f"Error getting duration: {e}")
-        return None
-
-    duration = get_audio_duration(audio_file)
-    if not duration:
-        await messagesender(bot, ctx.channel.id, content="Could not determine audio duration.")
-        return
-
-    try:
-        if position.endswith("%"):
-            percent = int(position.strip("%"))
-            if not (0 <= percent <= 100):
-                raise ValueError("Percentage must be between 0 and 100.")
-            seconds = int(duration * (percent / 100))
-        elif ":" in position:
-            minutes, seconds = map(int, position.split(":"))
-            seconds = minutes * 60 + seconds
-        else:
-            seconds = int(position)
+            if position.endswith("%"):
+                percent = int(position.strip("%"))
+                if not (0 <= percent <= 100):
+                    raise ValueError("Percentage must be between 0 and 100.")
+                seconds = int(duration * (percent / 100))
+            elif ":" in position:
+                minutes, seconds = map(int, position.split(":"))
+                seconds = minutes * 60 + seconds
+            else:
+                seconds = int(position)
         
-        if seconds < 0 or seconds > duration:
-            raise ValueError(f"Position must be between 0 and {duration} seconds.")
+            if seconds < 0 or seconds > duration:
+                raise ValueError(f"Position must be between 0 and {duration} seconds.")
 
-        ctx.voice_client.stop()
-        ffmpeg_options = f"-ss {seconds} -bufsize 10m"
-        source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options=ffmpeg_options)
-        ctx.voice_client.play(source, after=lambda _: asyncio.run_coroutine_threadsafe(play_next(ctx, ctx.voice_client), bot.loop))
+            ctx.voice_client.stop()
+            ffmpeg_options = f"-ss {seconds} -bufsize 10m"
+            source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options=ffmpeg_options)
+            ctx.voice_client.play(source, after=lambda _: asyncio.run_coroutine_threadsafe(play_next(ctx, ctx.voice_client), bot.loop))
 
-        await messagesender(bot, ctx.channel.id, f"⏩ Seeking to `{seconds}` seconds.")
+            await messagesender(bot, ctx.channel.id, f"⏩ Seeking to `{seconds}` seconds.")
     
-    except Exception as e:
-        await messagesender(bot, ctx.channel.id, f"An error occurred while seeking: {e}")
+        except Exception as e:
+            await messagesender(bot, ctx.channel.id, f"An error occurred while seeking: {e}")
 
 
 @bot.command(name="mute", aliases=["quiet"])
 async def toggle_mute(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    voice_client = ctx.voice_client
+        voice_client = ctx.voice_client
 
-    if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
-        if voice_client.is_paused():
-            voice_client.resume()
-            await messagesender(bot, ctx.channel.id, content="Unmuted the bot. 🔊")
+        if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
+            if voice_client.is_paused():
+                voice_client.resume()
+                await messagesender(bot, ctx.channel.id, content="Unmuted the bot. 🔊")
+            else:
+                voice_client.pause()
+                await messagesender(bot, ctx.channel.id, content="Muted the bot. 🔇")
         else:
-            voice_client.pause()
-            await messagesender(bot, ctx.channel.id, content="Muted the bot. 🔇")
-    else:
-        await messagesender(bot, ctx.channel.id, content="I'm not playing anything to mute or unmute.")
+            await messagesender(bot, ctx.channel.id, content="I'm not playing anything to mute or unmute.")
 
 @bot.command(name="lyrics")
 async def lyrics(ctx, *, song: str = None):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
-        
-    queue = list(server_queues.get(guild_id, asyncio.Queue())._queue)   
-    lyrics_fetcher = Lyrics(ctx, queue)
-
-    try:
-        if not song:
-            current_track = current_tracks.get(guild_id, {}).get("current_track")
-            if not current_track:
-                await messagesender(bot, ctx.channel.id, content="No song is currently playing.")
-                return
-            video_title = ''.join(current_track[1:])
-        else:
-            video_id = await fetch_video_id_from_ytsearch(song, ctx)
-            if not video_id:
-                return 
-            video_title = await get_youtube_video_title(video_id)
-
-        result = musicbrainzngs.search_recordings(query=video_title, limit=1)
-        if not result["recording-list"]:
-            await messagesender(bot, ctx.channel.id, f"No matching song found on MusicBrainz for: {song}")
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
             return
+        
+        queue = list(server_queues.get(guild_id, asyncio.Queue())._queue)   
+        lyrics_fetcher = Lyrics(ctx, queue)
 
-        recording = result["recording-list"][0]
-        artist_name = recording["artist-credit"][0]["artist"]["name"]
-        track_title = recording["title"]
+        try:
+            if not song:
+                current_track = current_tracks.get(guild_id, {}).get("current_track")
+                if not current_track:
+                    await messagesender(bot, ctx.channel.id, content="No song is currently playing.")
+                    return
+                video_title = ''.join(current_track[1:])
+            else:
+                video_id = await fetch_video_id_from_ytsearch(song, ctx)
+                if not video_id:
+                    return 
+                video_title = await get_youtube_video_title(video_id)
 
-        lyrics = lyrics_fetcher.get_lyrics(track_title, artist_name)
-        if lyrics:
-            embed = Embed(
-                title=f"Lyrics: {track_title} by {artist_name}",
-                description=lyrics[:2048],
-                color=discord.Color.purple()
-            )
-            await messagesender(bot, ctx.channel.id, embed=embed)
-        else:
-            await messagesender(bot, ctx.channel.id, f"Lyrics not found for: {track_title} by {artist_name}")
+            result = musicbrainzngs.search_recordings(query=video_title, limit=1)
+            if not result["recording-list"]:
+                await messagesender(bot, ctx.channel.id, f"No matching song found on MusicBrainz for: {song}")
+                return
 
-    except Exception as e:
-        await messagesender(bot, ctx.channel.id, f"An error occurred: {e}")
+            recording = result["recording-list"][0]
+            artist_name = recording["artist-credit"][0]["artist"]["name"]
+            track_title = recording["title"]
+
+            lyrics = lyrics_fetcher.get_lyrics(track_title, artist_name)
+            if lyrics:
+                embed = Embed(
+                    title=f"Lyrics: {track_title} by {artist_name}",
+                    description=lyrics[:2048],
+                    color=discord.Color.purple()
+                )
+                await messagesender(bot, ctx.channel.id, embed=embed)
+            else:
+                await messagesender(bot, ctx.channel.id, f"Lyrics not found for: {track_title} by {artist_name}")
+
+        except Exception as e:
+            await messagesender(bot, ctx.channel.id, f"An error occurred: {e}")
 
 @bot.command(name="volume", aliases=["vol"])
 async def volume(ctx, volume: int):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if not ctx.voice_client or not ctx.voice_client.is_playing():
-        await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
-        return
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
+            return
 
-    if 0 <= volume <= 200:
-        ctx.voice_client.source = discord.PCMVolumeTransformer(ctx.voice_client.source)
-        ctx.voice_client.source.volume = volume / 100
-        await messagesender(bot, ctx.channel.id, f"Volume set to {volume}%.")
-    else:
-        await messagesender(bot, ctx.channel.id, content="Volume must be between 0 and 200.")
+        if 0 <= volume <= 200:
+            ctx.voice_client.source = discord.PCMVolumeTransformer(ctx.voice_client.source)
+            ctx.voice_client.source.volume = volume / 100
+            await messagesender(bot, ctx.channel.id, f"Volume set to {volume}%.")
+        else:
+            await messagesender(bot, ctx.channel.id, content="Volume must be between 0 and 200.")
 
 @bot.command(name="shuffle")
 async def shuffle_queue(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if server_queues.get(guild_id) and len(server_queues[guild_id]._queue) > 1:
-        random.shuffle(server_queues[guild_id]._queue)
-        await messagesender(bot, ctx.channel.id, content="The queue has been shuffled! 🔀")
-    else:
-        await messagesender(bot, ctx.channel.id, content="The queue is too short to shuffle.")
+        if server_queues.get(guild_id) and len(server_queues[guild_id]._queue) > 1:
+            random.shuffle(server_queues[guild_id]._queue)
+            await messagesender(bot, ctx.channel.id, content="The queue has been shuffled! 🔀")
+        else:
+            await messagesender(bot, ctx.channel.id, content="The queue is too short to shuffle.")
 
 @bot.command(name="invite", aliases=["link"])
 async def invite(ctx):
@@ -1120,124 +1122,124 @@ async def invite(ctx):
 
 @bot.command(name="move")
 async def move_song(ctx, from_pos: int, to_pos: int):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    queue = server_queues.get(guild_id)._queue if server_queues.get(guild_id) else None
+        queue = server_queues.get(guild_id)._queue if server_queues.get(guild_id) else None
 
-    if queue and 1 <= from_pos <= len(queue) and 1 <= to_pos <= len(queue):
-        from_pos -= 1
-        to_pos -= 1
-        track = queue[from_pos]
-        del queue[from_pos]
-        queue.insert(to_pos, track)
+        if queue and 1 <= from_pos <= len(queue) and 1 <= to_pos <= len(queue):
+            from_pos -= 1
+            to_pos -= 1
+            track = queue[from_pos]
+            del queue[from_pos]
+            queue.insert(to_pos, track)
 
-        await messagesender(bot, ctx.channel.id, f"Moved **{''.join(track[1:])}** from position {from_pos + 1} to {to_pos + 1}.")
-    else:
-        await messagesender(bot, ctx.channel.id, content="Invalid positions. Please provide valid track numbers from the queue.")
+            await messagesender(bot, ctx.channel.id, f"Moved **{''.join(track[1:])}** from position {from_pos + 1} to {to_pos + 1}.")
+        else:
+            await messagesender(bot, ctx.channel.id, content="Invalid positions. Please provide valid track numbers from the queue.")
 
 @bot.command(name="join", aliases=["come"])
 async def join_channel(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
     
-    if ctx.author.voice:
-        channel = ctx.author.voice.channel
-        bot.intentional_disconnections[guild_id] = False
-        await channel.connect()
-        await messagesender(bot, ctx.channel.id, f"Joined **{channel.name}** voice channel. 🎤")
-    else:
-        await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
+        if ctx.author.voice:
+            channel = ctx.author.voice.channel
+            bot.intentional_disconnections[guild_id] = False
+            await channel.connect()
+            await messagesender(bot, ctx.channel.id, f"Joined **{channel.name}** voice channel. 🎤")
+        else:
+            await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
 
 @bot.command(name="leave", aliases=["go"])
 async def leave_channel(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
         
-    if ctx.voice_client:
-        bot.intentional_disconnections[guild_id] = True
-        await ctx.voice_client.disconnect()
-        await messagesender(bot, ctx.channel.id, content="Disconnected from the voice channel. 👋")
-    else:
-        await messagesender(bot, ctx.channel.id, content="I'm not in a voice channel to leave.")
+        if ctx.voice_client:
+            bot.intentional_disconnections[guild_id] = True
+            await ctx.voice_client.disconnect()
+            await messagesender(bot, ctx.channel.id, content="Disconnected from the voice channel. 👋")
+        else:
+            await messagesender(bot, ctx.channel.id, content="I'm not in a voice channel to leave.")
 
 @bot.command(name="sendplox")
 async def sendmp3(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
 
-    dir_path = os.path.dirname(os.path.realpath(__file__)).replace("\\", "/")
-    current_track = current_tracks.get(guild_id, {}).get("current_track")
-    file_path = f"music/{''.join(current_track[:1])}.mp3"
-    if not os.path.exists(file_path):
-        await messagesender(bot, ctx.channel.id, content="File not found.")
-        return
-    file_size = os.path.getsize(file_path)
-    if file_size > 8 * 1024 * 1024:
-        zip_path = file_path + ".zip"
-        shutil.make_archive(file_path, 'zip', root_dir=os.path.dirname(file_path), base_dir=os.path.basename(file_path))
-        zip_size = os.path.getsize(zip_path)
-        if zip_size > 8 * 1024 * 1024:
-            split_path = file_path + ".7z"
-            split_command = f'7z a -t7z -v7m "{split_path}" "{file_path}"'
-            subprocess.run(split_command, shell=True)
-            split_parts = [f for f in os.listdir(os.path.dirname(file_path)) if f.startswith(os.path.basename(split_path))]
-            for part in sorted(split_parts):
-                part_path = os.path.join(os.path.dirname(file_path), part)
-                await ctx.author.send(file=discord.File(part_path))
-                os.remove(part_path)
+        dir_path = os.path.dirname(os.path.realpath(__file__)).replace("\\", "/")
+        current_track = current_tracks.get(guild_id, {}).get("current_track")
+        file_path = f"music/{''.join(current_track[:1])}.mp3"
+        if not os.path.exists(file_path):
+            await messagesender(bot, ctx.channel.id, content="File not found.")
+            return
+        file_size = os.path.getsize(file_path)
+        if file_size > 8 * 1024 * 1024:
+            zip_path = file_path + ".zip"
+            shutil.make_archive(file_path, 'zip', root_dir=os.path.dirname(file_path), base_dir=os.path.basename(file_path))
+            zip_size = os.path.getsize(zip_path)
+            if zip_size > 8 * 1024 * 1024:
+                split_path = file_path + ".7z"
+                split_command = f'7z a -t7z -v7m "{split_path}" "{file_path}"'
+                subprocess.run(split_command, shell=True)
+                split_parts = [f for f in os.listdir(os.path.dirname(file_path)) if f.startswith(os.path.basename(split_path))]
+                for part in sorted(split_parts):
+                    part_path = os.path.join(os.path.dirname(file_path), part)
+                    await ctx.author.send(file=discord.File(part_path))
+                    os.remove(part_path)
+            else:
+                with open(zip_path, 'rb') as file:
+                    await ctx.author.typing()
+                    await ctx.author.send(file=discord.File(file, filename=os.path.basename(zip_path)))
+                os.remove(zip_path) 
         else:
-            with open(zip_path, 'rb') as file:
+            with open(file_path, 'rb') as file:
                 await ctx.author.typing()
-                await ctx.author.send(file=discord.File(file, filename=os.path.basename(zip_path)))
-            os.remove(zip_path) 
-    else:
-        with open(file_path, 'rb') as file:
-            await ctx.author.typing()
-            await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
+                await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
 
 @bot.command(name="history", aliases=["played"])
 async def history(ctx):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
 
-    history_list = track_history.get(guild_id, [])
+        history_list = track_history.get(guild_id, [])
 
-    if not history_list:
-        await messagesender(bot, ctx.channel.id, "No recent tracks available.")
-        return
+        if not history_list:
+            await messagesender(bot, ctx.channel.id, "No recent tracks available.")
+            return
     
-    embed = discord.Embed(title="\U0001F3B5 Recently Played Songs", color=discord.Color.blue())
-    for index, track in enumerate(history_list[-HISTORY_PAGE_SIZE:], start=1):
-        embed.add_field(name=f"{index}. {track[1]}", value=f"ID: {track[0]}", inline=False)
-    await messagesender(bot, ctx.channel.id, embed=embed)
+        embed = discord.Embed(title="\U0001F3B5 Recently Played Songs", color=discord.Color.blue())
+        for index, track in enumerate(history_list[-HISTORY_PAGE_SIZE:], start=1):
+            embed.add_field(name=f"{index}. {track[1]}", value=f"ID: {track[0]}", inline=False)
+        await messagesender(bot, ctx.channel.id, embed=embed)
 
 @bot.command(name="autoplay", aliases=["autodj"])
 async def autoplay(ctx, mode: str):
-    await ctx.typing()
-    guild_id = ctx.guild.id
-    if not await check_perms(ctx, guild_id):
-        return
+    await with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
 
-    if mode.lower() not in ["on", "off"]:
-        await messagesender(bot, ctx.channel.id, "Use `!autoplay on` or `!autoplay off`.")
-        return
+        if mode.lower() not in ["on", "off"]:
+            await messagesender(bot, ctx.channel.id, "Use `!autoplay on` or `!autoplay off`.")
+            return
 
-    autoplay_enabled[guild_id] = mode.lower() == "on"
-    bot.intentional_disconnections[guild_id] = False 
+        autoplay_enabled[guild_id] = mode.lower() == "on"
+        bot.intentional_disconnections[guild_id] = False 
 
-    status = "enabled" if autoplay_enabled[guild_id] else "disabled"
-    await messagesender(bot, ctx.channel.id, f"Autoplay is now {status} for this server.")
+        status = "enabled" if autoplay_enabled[guild_id] else "disabled"
+        await messagesender(bot, ctx.channel.id, f"Autoplay is now {status} for this server.")
 
 
 async def get_youtube_video_title(video_id):
