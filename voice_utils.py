@@ -10,7 +10,6 @@ import stt
 from discord import FFmpegPCMAudio
 from discord.ext import commands
 from tempfile import NamedTemporaryFile
-from discord import AudioSink
 
 MODEL_DIR = "models"
 MODEL_FILE = os.path.join(MODEL_DIR, "model.tflite")
