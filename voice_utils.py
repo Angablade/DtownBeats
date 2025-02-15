@@ -46,8 +46,6 @@ setup_models()
 
 voice_listeners = {}
 
-import discord
-
 class UserAudioRecorder:
     """Captures and stores individual users' audio streams."""
     
@@ -67,6 +65,19 @@ class UserAudioRecorder:
         """Retrieve compiled audio for a specific user."""
         return b''.join(self.audio_buffers.get(user, []))
 
+class VoiceListener:
+    """Handles speech-to-text processing using Coqui STT."""
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.model = stt.Model("models/model.tflite") 
+        self.model.enableExternalScorer("models/scorer.scorer")
+
+    def recognize_audio(self, audio_file):
+        """Process a WAV file and return transcribed text."""
+        with wave.open(audio_file, "rb") as wf:
+            audio = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
+        return self.model.stt(audio)
 
 async def capture_audio(voice_client):
     """Captures per-user audio and returns transcriptions."""
@@ -106,7 +117,7 @@ def recognize_audio(audio_file):
 
 async def process_audio(ctx, voice_client):
     """Processes voice input in smaller chunks to reduce CPU usage."""
-    listener = VoiceListener(ctx)
+    listener = VoiceListener(ctx)  # ✅ Now properly defined
 
     while voice_client.is_connected():
         try:
@@ -114,14 +125,15 @@ async def process_audio(ctx, voice_client):
             for user, text in transcriptions.items():
                 print(f"🎤 Recognized ({user}): {text}")
 
-                if len(text) < 4:
+                # Ignore short or low-confidence phrases
+                if len(text) < 4:  # Skip random noise
                     continue
 
                 words = text.split()
                 chunk = []
                 for word in words:
                     chunk.append(word)
-                    if len(chunk) >= 3:
+                    if len(chunk) >= 6:
                         command = " ".join(chunk)
                         await handle_voice_command(ctx, user, command)
                         chunk = []
@@ -133,6 +145,7 @@ async def process_audio(ctx, voice_client):
 
         except Exception as e:
             print(f"⚠️ Error processing audio: {e}")
+
 
 
 async def handle_voice_command(ctx, user, command):
