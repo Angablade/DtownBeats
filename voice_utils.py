@@ -47,37 +47,39 @@ setup_models()
 
 voice_listeners = {}
 
-class UserAudioRecorder(AudioSink):
+import discord
+
+class UserAudioRecorder:
     """Captures and stores individual users' audio streams."""
     
     def __init__(self):
         self.audio_buffers = {}
 
-    def write(self, data, user):
-        """Store user audio separately and convert OPUS frames to WAV."""
+    def write(self, user, data):
+        """Store user audio separately."""
         if user not in self.audio_buffers:
             self.audio_buffers[user] = []
 
-        pcm_data = discord.opus.Decoder().decode(data, 960)  
-
-        if max(pcm_data) > 500: 
-            self.audio_buffers[user].append(pcm_data)
+        decoder = discord.opus.Decoder()
+        pcm_data = decoder.decode(data, 960)
+        self.audio_buffers[user].append(pcm_data)
 
     def get_audio(self, user):
         """Retrieve compiled audio for a specific user."""
         return b''.join(self.audio_buffers.get(user, []))
 
+
 async def capture_audio(voice_client):
     """Captures per-user audio and returns transcriptions."""
     try:
         recorder = UserAudioRecorder()
-        voice_client.listen(recorder)  
+        voice_client.listen(recorder)
 
-        await asyncio.sleep(5) 
+        await asyncio.sleep(5)
 
         transcriptions = {}
         for user, audio_data in recorder.audio_buffers.items():
-            if not audio_data: 
+            if not audio_data:
                 continue
 
             with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
@@ -87,13 +89,14 @@ async def capture_audio(voice_client):
                     wf.setsampwidth(2)
                     wf.setframerate(16000)
                     wf.writeframes(b''.join(audio_data))
-                transcriptions[user] = recognize_audio(temp_audio_path) 
+                transcriptions[user] = recognize_audio(temp_audio_path)
 
         return transcriptions
 
     except Exception as e:
         print(f"⚠️ Error capturing audio: {e}")
         return {}
+
 
 
 def recognize_audio(audio_file):
