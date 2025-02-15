@@ -117,7 +117,7 @@ def recognize_audio(audio_file):
 
 async def process_audio(ctx, voice_client):
     """Processes voice input in smaller chunks to reduce CPU usage."""
-    listener = VoiceListener(ctx)  # ✅ Now properly defined
+    listener = VoiceListener(ctx) 
 
     while voice_client.is_connected():
         try:
@@ -125,8 +125,7 @@ async def process_audio(ctx, voice_client):
             for user, text in transcriptions.items():
                 print(f"🎤 Recognized ({user}): {text}")
 
-                # Ignore short or low-confidence phrases
-                if len(text) < 4:  # Skip random noise
+                if len(text) < 4:
                     continue
 
                 words = text.split()
