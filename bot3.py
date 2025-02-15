@@ -316,7 +316,7 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
     return video_ids
         
 async def play_next(ctx, voice_client):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if autoplay_enabled.get(guild_id, False) and bot.intentional_disconnections.get(guild_id, False):
             return
@@ -418,7 +418,7 @@ async def setchannel(ctx, channel: discord.TextChannel):
 
 @bot.command(name="grablist", aliases=["grabplaylist"])
 async def playlister(ctx, *, search: str = None):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
 
         if not await check_perms(ctx, guild_id):
@@ -484,7 +484,7 @@ async def playlister(ctx, *, search: str = None):
 
 @bot.command(name="play")
 async def play(ctx, *, search: str = None):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
     
         if not await check_perms(ctx, guild_id):
@@ -600,7 +600,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str):
 
 @bot.command(name="skip", aliases=["next"])
 async def skip(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -611,7 +611,7 @@ async def skip(ctx):
 
 @bot.command(name="stop")
 async def stop(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -625,7 +625,7 @@ async def stop(ctx):
 
 @bot.command(name="pause", aliases=["hold"])
 async def pause(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -637,7 +637,7 @@ async def pause(ctx):
 
 @bot.command(name="resume", aliases=["continue"])
 async def resume(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -649,7 +649,7 @@ async def resume(ctx):
 
 @bot.command(name="queue", aliases=["list"])
 async def show_queue(ctx, page: int = 1):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
 
         if not server_queues.get(guild_id) or server_queues[guild_id].empty():
@@ -682,7 +682,7 @@ async def show_queue(ctx, page: int = 1):
 
 @bot.command(name="search", aliases=["find"])
 async def search(ctx, *, query: str):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -710,7 +710,7 @@ async def search(ctx, *, query: str):
 
 @bot.command(name="clear")
 async def clear(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -721,7 +721,7 @@ async def clear(ctx):
 
 @bot.command(name="remove")
 async def remove(ctx, index: int):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -734,7 +734,7 @@ async def remove(ctx, index: int):
 
 @bot.command(name="loop", aliases=["repeat"])
 async def loop(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -744,7 +744,7 @@ async def loop(ctx):
 
 @bot.command(name="nowplaying", aliases=["current","currentsong","playing"])
 async def nowplaying(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -786,7 +786,7 @@ async def dockboot(ctx):
 
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
                                             #[HHMMSS-MMDDYYYY]
         embed = discord.Embed(
             title=f"DtownBeats - Version 0.3 [044945-14022025]",
@@ -827,7 +827,7 @@ async def version(ctx):
 
 @bot.command(name="cmds", aliases=["commands"])
 async def help_command(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         """Sends a list of commands in a direct message with a table layout."""
         embed = Embed(title="📜 Bot Commands", description="Here is a list of all available commands:", color=discord.Color.blue())
 
@@ -949,7 +949,7 @@ async def help_command(ctx):
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
     
         if not await check_perms(ctx, guild_id):
@@ -1018,7 +1018,7 @@ async def seek(ctx, position: str):
 
 @bot.command(name="mute", aliases=["quiet"])
 async def toggle_mute(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1037,7 +1037,7 @@ async def toggle_mute(ctx):
 
 @bot.command(name="lyrics")
 async def lyrics(ctx, *, song: str = None):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1083,7 +1083,7 @@ async def lyrics(ctx, *, song: str = None):
 
 @bot.command(name="volume", aliases=["vol"])
 async def volume(ctx, volume: int):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1101,7 +1101,7 @@ async def volume(ctx, volume: int):
 
 @bot.command(name="shuffle")
 async def shuffle_queue(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1122,7 +1122,7 @@ async def invite(ctx):
 
 @bot.command(name="move")
 async def move_song(ctx, from_pos: int, to_pos: int):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1142,7 +1142,7 @@ async def move_song(ctx, from_pos: int, to_pos: int):
 
 @bot.command(name="join", aliases=["come"])
 async def join_channel(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1157,7 +1157,7 @@ async def join_channel(ctx):
 
 @bot.command(name="leave", aliases=["go"])
 async def leave_channel(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1171,7 +1171,7 @@ async def leave_channel(ctx):
 
 @bot.command(name="sendplox")
 async def sendmp3(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1208,7 +1208,7 @@ async def sendmp3(ctx):
 
 @bot.command(name="history", aliases=["played"])
 async def history(ctx):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
@@ -1226,7 +1226,7 @@ async def history(ctx):
 
 @bot.command(name="autoplay", aliases=["autodj"])
 async def autoplay(ctx, mode: str):
-    await with ctx.typing():
+    async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
