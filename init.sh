@@ -2,12 +2,12 @@
 
 set -e
 
-apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full
+apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full apt-utils libopus-dev
 
 pip install --root-user-action --upgrade pip
 pip install --root-user-action --no-cache-dir "pybind11>=2.12"
 pip install --root-user-action --no-cache-dir "numpy<2"
-pip install --root-user-action --no-cache-dir discord.py pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs \
+pip install --root-user-action --no-cache-dir py-cord pyyaml requests yt-dlp asyncio aiohttp musicbrainzngs \
     beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein
 
 pip install --root-user-action --no-cache-dir stt
