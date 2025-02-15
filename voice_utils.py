@@ -80,34 +80,32 @@ class VoiceListener:
         return self.model.stt(audio)
 
 async def capture_audio(voice_client):
-    """Captures per-user audio and returns transcriptions."""
+    """Captures raw audio from Discord and returns transcriptions."""
     try:
-        recorder = UserAudioRecorder()
-        voice_client.listen(recorder)
+        audio_data = bytearray()
+
+        voice_client.listen(lambda data: audio_data.extend(data))
 
         await asyncio.sleep(5)
 
-        transcriptions = {}
-        for user, audio_data in recorder.audio_buffers.items():
-            if not audio_data:
-                continue
+        if not audio_data:
+            print("⚠️ No audio data received!")
+            return {}
 
-            with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-                temp_audio_path = temp_audio.name
-                with wave.open(temp_audio_path, "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(16000)
-                    wf.writeframes(b''.join(audio_data))
-                transcriptions[user] = recognize_audio(temp_audio_path)
+        with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            temp_audio_path = temp_audio.name
+            with wave.open(temp_audio_path, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
+                wf.writeframes(audio_data)
 
-        return transcriptions
+        transcription = recognize_audio(temp_audio_path)
+        return {"user": transcription}  
 
     except Exception as e:
         print(f"⚠️ Error capturing audio: {e}")
         return {}
-
-
 
 def recognize_audio(audio_file):
     """Process a WAV file and return transcribed text."""
@@ -117,35 +115,31 @@ def recognize_audio(audio_file):
 
 async def process_audio(ctx, voice_client):
     """Processes voice input in smaller chunks to reduce CPU usage."""
-    listener = VoiceListener(ctx) 
-
     while voice_client.is_connected():
         try:
             transcriptions = await capture_audio(voice_client)
             for user, text in transcriptions.items():
                 print(f"🎤 Recognized ({user}): {text}")
 
-                if len(text) < 4:
+                if len(text) < 7: 
                     continue
 
                 words = text.split()
                 chunk = []
                 for word in words:
                     chunk.append(word)
-                    if len(chunk) >= 6:
+                    if len(chunk) >= 6: 
                         command = " ".join(chunk)
                         await handle_voice_command(ctx, user, command)
                         chunk = []
                         await asyncio.sleep(0.5)
 
-                if chunk:
+                if chunk: 
                     command = " ".join(chunk)
                     await handle_voice_command(ctx, user, command)
 
         except Exception as e:
             print(f"⚠️ Error processing audio: {e}")
-
-
 
 async def handle_voice_command(ctx, user, command):
     """Executes commands based on transcribed voice input."""
