@@ -78,7 +78,7 @@ async def start_listening(ctx):
     await ctx.send("🎤 Listening for voice commands... Say 'Music bot <command>'.")
     
     # Start recording using WaveSink
-    await voice_client.start_recording(discord.sinks.WaveSink(), finished_callback, ctx)
+    voice_client.start_recording(discord.sinks.WaveSink(), finished_callback, ctx)
 
 async def stop_listening(ctx):
     """Stops voice recognition and disconnects the bot."""
