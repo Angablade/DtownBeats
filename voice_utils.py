@@ -83,10 +83,17 @@ async def capture_audio(voice_client):
     """Captures raw audio from Discord and returns transcriptions."""
     try:
         audio_data = bytearray()
+        decoder = discord.opus.Decoder()
 
-        voice_client.listen(lambda data: audio_data.extend(data))
+        while voice_client.is_connected():
+            try:
+                packet = await voice_client.recv()
+                pcm_data = decoder.decode(packet, 960) 
+                audio_data.extend(pcm_data)
 
-        await asyncio.sleep(5)
+            except Exception as e:
+                print(f"⚠️ Error receiving audio: {e}")
+                break
 
         if not audio_data:
             print("⚠️ No audio data received!")
@@ -101,11 +108,12 @@ async def capture_audio(voice_client):
                 wf.writeframes(audio_data)
 
         transcription = recognize_audio(temp_audio_path)
-        return {"user": transcription}  
+        return {"user": transcription}
 
     except Exception as e:
         print(f"⚠️ Error capturing audio: {e}")
         return {}
+
 
 def recognize_audio(audio_file):
     """Process a WAV file and return transcribed text."""
