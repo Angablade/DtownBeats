@@ -15,7 +15,7 @@ MODEL_FILE = os.path.join(MODEL_DIR, "model.tflite")
 SCORER_FILE = os.path.join(MODEL_DIR, "scorer.scorer")
 
 MODEL_URL = "https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite"
-SCORER_URL = "https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/huge-vocabulary.scorer"
+SCORER_URL = "https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocabulary.scorer"
 
 def install_coqui_stt():
     """Ensure Coqui STT is installed."""
@@ -60,25 +60,26 @@ class VoiceListener:
         return self.model.stt(audio)
 
 async def start_listening(ctx):
-    """Starts voice recognition using Pycord's AudioSink."""
+    """Starts voice recognition and continuously processes commands."""
     guild_id = ctx.guild.id
 
     if guild_id in voice_listeners:
-        await ctx.send("🎤 Already connected! Starting voice recognition now...")
-        voice_client = voice_listeners[guild_id]
-    else:
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.send("❌ You must be in a voice channel.")
-            return
+        await ctx.send("🎤 Already listening for commands.")
+        return
 
-        voice_channel = ctx.author.voice.channel
-        voice_client = await voice_channel.connect()
-        voice_listeners[guild_id] = voice_client
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("❌ You must be in a voice channel.")
+        return
 
-    await ctx.send("🎤 Listening for voice commands... Say 'Music bot <command>'.")
-    
-    # Start recording using WaveSink
-    voice_client.start_recording(discord.sinks.WaveSink(), finished_callback, ctx)
+    voice_channel = ctx.author.voice.channel
+    voice_client = await voice_channel.connect()
+    voice_listeners[guild_id] = voice_client
+
+    await ctx.send("🎤 Listening for voice commands. Say 'Music bot <command>'.")
+
+    # Start live processing with `LiveSink`
+    sink = discord.sinks.WaveSink()
+    voice_client.start_recording(sink, finished_callback, ctx)
 
 async def stop_listening(ctx):
     """Stops voice recognition and disconnects the bot."""
@@ -88,17 +89,16 @@ async def stop_listening(ctx):
 
     voice_client = voice_listeners.pop(ctx.guild.id)
 
-    # Stop the recording before disconnecting
-    await voice_client.stop_recording()
-    
+    # Stop recording
+    voice_client.stop_recording()
+
     await voice_client.disconnect()
     await ctx.send("🛑 Voice control stopped.")
 
 def finished_callback(sink, ctx):
-    """Processes recorded audio when finished."""
-    print("🔊 Recording complete!")
+    """Continuously processes voice commands as they're spoken."""
+    print("🔊 Processing voice commands in real-time!")
 
-    transcriptions = {}
     for user, audio_data in sink.audio_data.items():
         with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
             temp_audio_path = temp_audio.name
@@ -109,15 +109,14 @@ def finished_callback(sink, ctx):
                 wf.writeframes(audio_data.file.getvalue())
 
         # Transcribe user audio
-        transcriptions[user.display_name] = recognize_audio(temp_audio_path)
+        transcribed_text = recognize_audio(temp_audio_path)
+        print(f"🎤 {user}: {transcribed_text}")
 
-    # Process recognized commands asynchronously
-    for user, text in transcriptions.items():
-        print(f"🎤 {user}: {text}")
-        asyncio.create_task(process_voice_command(ctx, text))  # Run command processing
+        # Process command live
+        asyncio.create_task(process_voice_command(ctx, transcribed_text))
 
 async def process_voice_command(ctx, text):
-    """Executes commands based on transcribed voice input."""
+    """Executes commands as soon as they are transcribed."""
     text = text.lower().strip()
 
     # Ensure the command starts with "music bot"
@@ -125,10 +124,9 @@ async def process_voice_command(ctx, text):
         return
     
     command = text[len("music bot"):].strip()  # Remove "Music bot" from the start
-
-    # Check for recognized commands
     bot = ctx.bot  # Get the bot instance
 
+    # Execute commands live
     if command.startswith("play "):
         search_term = command[len("play "):]
         await ctx.invoke(bot.get_command("play"), search=search_term)
