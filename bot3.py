@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 from io import BytesIO
 from aiofiles import open as aopen
-from youtube_mp3 import get_mp3_filename
+from youtube_mp3 import get_audio_filename
 from youtube_pl import grab_youtube_pl
 from lyrics import Lyrics
 from discord.ext import commands
@@ -102,7 +102,7 @@ message_map = {}
 
 async def download_audio(video_id):
     try: 
-         filenam = await get_mp3_filename(video_id)
+         filenam = await get_audio_filename(video_id)
          print(f"{filenam} is playing...")
          return filenam
     except Exception as e:
