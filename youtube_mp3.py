@@ -44,7 +44,7 @@ class YouTubeAudioStreamer:
                 'preferredcodec': codec,
                 'preferredquality': quality,
             }],
-            'outtmpl': f'music/%(id)s.{codec}',
+            'outtmpl': f'music/%(id)s',
         }
         
         try:
