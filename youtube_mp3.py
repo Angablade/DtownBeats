@@ -8,8 +8,9 @@ class YouTubeAudioStreamer:
     def __init__(self, video_id):
         if not self.validate_video_id(video_id):
             raise ValueError("Invalid YouTube video ID")
-        self.video_url = f'https://www.youtube.com/watch?v={video_id}'
         self.video_id = video_id
+        self.video_url = f'https://www.youtube.com/watch?v={video_id}'
+        self.music_url = f'https://music.youtube.com/watch?v={video_id}'
 
     @staticmethod
     def validate_video_id(video_id: str) -> bool:
@@ -26,17 +27,21 @@ class YouTubeAudioStreamer:
             print(f"File already cached: {mp3_file_path}")
             return mp3_file_path
 
-        # Try downloading Opus 774 first
-        if await self._attempt_download('opus', '774', opus_file_path):
+        # Try downloading Opus 774 first from YouTube Music
+        if await self._attempt_download(self.music_url, 'opus', '774', opus_file_path):
+            return opus_file_path
+        
+        # Try downloading Opus 774 from regular YouTube
+        if await self._attempt_download(self.video_url, 'opus', '774', opus_file_path):
             return opus_file_path
         
         # Fallback to MP3 if Opus 774 isn't available
-        if await self._attempt_download('mp3', '320', mp3_file_path):
+        if await self._attempt_download(self.video_url, 'mp3', '320', mp3_file_path):
             return mp3_file_path
         
         raise RuntimeError("Error: Unable to download audio in any format")
 
-    async def _attempt_download(self, codec, quality, output_path):
+    async def _attempt_download(self, url, codec, quality, output_path):
         ydl_opts = {
             'format': 'bestaudio[acodec^=opus]/bestaudio',
             'postprocessors': [{
@@ -49,15 +54,15 @@ class YouTubeAudioStreamer:
         
         try:
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._download_sync, ydl_opts)
+            await loop.run_in_executor(None, self._download_sync, ydl_opts, url)
             return os.path.exists(output_path)
         except Exception as e:
-            print(f"Error downloading {codec} format: {e}")
+            print(f"Error downloading {codec} format from {url}: {e}")
             return False
 
-    def _download_sync(self, ydl_opts):
+    def _download_sync(self, ydl_opts, url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info(self.video_url, download=True)
+            ydl.extract_info(url, download=True)
 
 async def get_audio_filename(video_id):
     streamer = YouTubeAudioStreamer(video_id)
