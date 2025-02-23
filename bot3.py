@@ -1214,67 +1214,99 @@ async def sendmp3(ctx):
 
 @bot.command(name="bandcamp")
 async def bandcamp(ctx, url: str):
-    if not await check_perms(ctx, ctx.guild.id):
-        return
-    if not await handle_voice_connection(ctx):
-        return
+    async with ctx.typing():
+        guild_id = ctx.guild.id
     
-    await ctx.send(f"Processing Bandcamp link: {url}")
-    file_path = await get_bandcamp_audio(url)
-    if file_path and os.path.exists(file_path):
-        await queue_and_play_next(ctx, ctx.guild.id, file_path)
-    else:
-        await ctx.send("Failed to process Bandcamp track.")
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+    
+        await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: {url}")
+        file_path = await get_bandcamp_audio(url)
+        if file_path and os.path.exists(file_path):
+            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+        else:
+            await messagesender(bot, ctx.channel.id, "Failed to process Bandcamp track.")
 
 @bot.command(name="soundcloud")
 async def soundcloud(ctx, url: str):
-    if not await check_perms(ctx, ctx.guild.id):
-        return
-    if not await handle_voice_connection(ctx):
-        return
+    async with ctx.typing():
+        guild_id = ctx.guild.id
     
-    await ctx.send(f"Processing SoundCloud link: {url}")
-    file_path = await get_soundcloud_audio(url)
-    if file_path and os.path.exists(file_path):
-        await queue_and_play_next(ctx, ctx.guild.id, file_path)
-    else:
-        await ctx.send("Failed to process SoundCloud track.")
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+    
+        await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
+        file_path = await get_soundcloud_audio(url)
+        if file_path and os.path.exists(file_path):
+            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+        else:
+            await messagesender(bot, ctx.channel.id, "Failed to process SoundCloud track.")
 
 @bot.command(name="spotify")
 async def spotify(ctx, url: str):
-    if not await check_perms(ctx, ctx.guild.id):
-        return
-    if not await handle_voice_connection(ctx):
-        return
+    async with ctx.typing():
+        guild_id = ctx.guild.id
     
-    await ctx.send(f"Processing Spotify link: {url}")
-    youtube_link = await get_spotify_audio(url)
-    if youtube_link:
-        file_path = await get_audio_filename(youtube_link)
-        if file_path and os.path.exists(file_path):
-            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+    
+        await messagesender(bot, ctx.channel.id, f"Processing Spotify link: {url}")
+        youtube_link = await get_spotify_audio(url)
+        if youtube_link:
+            file_path = await get_audio_filename(youtube_link)
+            if file_path and os.path.exists(file_path):
+                await queue_and_play_next(ctx, ctx.guild.id, file_path)
+            else:
+                await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
         else:
-            await ctx.send("Failed to download Spotify track.")
-    else:
-        await ctx.send("Failed to process Spotify track.")
+            await messagesender(bot, ctx.channel.id, "Failed to process Spotify track.")
 
 @bot.command(name="applemusic")
 async def applemusic(ctx, url: str):
-    if not await check_perms(ctx, ctx.guild.id):
-        return
-    if not await handle_voice_connection(ctx):
-        return
+    async with ctx.typing():
+        guild_id = ctx.guild.id
     
-    await ctx.send(f"Processing Apple Music link: {url}")
-    youtube_link = await get_apple_music_audio(url)
-    if youtube_link:
-        file_path = await get_audio_filename(youtube_link)
-        if file_path and os.path.exists(file_path):
-            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+    
+        await messagesender(bot, ctx.channel.id, f"Processing Apple Music link: {url}")
+        youtube_link = await get_apple_music_audio(url)
+        if youtube_link:
+            file_path = await get_audio_filename(youtube_link)
+            if file_path and os.path.exists(file_path):
+                await queue_and_play_next(ctx, ctx.guild.id, file_path)
+            else:
+                await messagesender(bot, ctx.channel.id, "Failed to download Apple Music track.")
         else:
-            await ctx.send("Failed to download Apple Music track.")
-    else:
-        await ctx.send("Failed to process Apple Music track.")
+            await messagesender(bot, ctx.channel.id, "Failed to process Apple Music track.")
 
 @bot.command(name="history", aliases=["played"])
 async def history(ctx):
