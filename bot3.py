@@ -13,14 +13,20 @@ import musicbrainzngs
 import shutil
 import subprocess
 
-from voice_utils import start_listening, stop_listening
+from utils.voice_utils import start_listening, stop_listening
+from utils.youtube_pl import grab_youtube_pl
+from utils.lyrics import Lyrics
+
+from sources.youtube_mp3 import get_audio_filename
+from sources.bandcamp_mp3 import get_bandcamp_audio
+from sources.soundcloud_mp3 import get_soundcloud_audio
+from sources.spotify_mp3 import get_spotify_audio
+from sources.apple_music_mp3 import get_apple_music_audio
+
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 from io import BytesIO
 from aiofiles import open as aopen
-from youtube_mp3 import get_audio_filename
-from youtube_pl import grab_youtube_pl
-from lyrics import Lyrics
 from discord.ext import commands
 from discord.ui import View, Button
 from discord import FFmpegPCMAudio, Embed
@@ -482,7 +488,7 @@ async def playlister(ctx, *, search: str = None):
         else:
             await messagesender(bot, ctx.channel.id, "No search query entered!")
 
-@bot.command(name="play")
+@bot.command(name="play", aliases=["youtube"])
 async def play(ctx, *, search: str = None):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -1205,6 +1211,70 @@ async def sendmp3(ctx):
             with open(file_path, 'rb') as file:
                 await ctx.author.typing()
                 await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
+
+@bot.command(name="bandcamp")
+async def bandcamp(ctx, url: str):
+    if not await check_perms(ctx, ctx.guild.id):
+        return
+    if not await handle_voice_connection(ctx):
+        return
+    
+    await ctx.send(f"Processing Bandcamp link: {url}")
+    file_path = await get_bandcamp_audio(url)
+    if file_path and os.path.exists(file_path):
+        await queue_and_play_next(ctx, ctx.guild.id, file_path)
+    else:
+        await ctx.send("Failed to process Bandcamp track.")
+
+@bot.command(name="soundcloud")
+async def soundcloud(ctx, url: str):
+    if not await check_perms(ctx, ctx.guild.id):
+        return
+    if not await handle_voice_connection(ctx):
+        return
+    
+    await ctx.send(f"Processing SoundCloud link: {url}")
+    file_path = await get_soundcloud_audio(url)
+    if file_path and os.path.exists(file_path):
+        await queue_and_play_next(ctx, ctx.guild.id, file_path)
+    else:
+        await ctx.send("Failed to process SoundCloud track.")
+
+@bot.command(name="spotify")
+async def spotify(ctx, url: str):
+    if not await check_perms(ctx, ctx.guild.id):
+        return
+    if not await handle_voice_connection(ctx):
+        return
+    
+    await ctx.send(f"Processing Spotify link: {url}")
+    youtube_link = await get_spotify_audio(url)
+    if youtube_link:
+        file_path = await get_audio_filename(youtube_link)
+        if file_path and os.path.exists(file_path):
+            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+        else:
+            await ctx.send("Failed to download Spotify track.")
+    else:
+        await ctx.send("Failed to process Spotify track.")
+
+@bot.command(name="applemusic")
+async def applemusic(ctx, url: str):
+    if not await check_perms(ctx, ctx.guild.id):
+        return
+    if not await handle_voice_connection(ctx):
+        return
+    
+    await ctx.send(f"Processing Apple Music link: {url}")
+    youtube_link = await get_apple_music_audio(url)
+    if youtube_link:
+        file_path = await get_audio_filename(youtube_link)
+        if file_path and os.path.exists(file_path):
+            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+        else:
+            await ctx.send("Failed to download Apple Music track.")
+    else:
+        await ctx.send("Failed to process Apple Music track.")
 
 @bot.command(name="history", aliases=["played"])
 async def history(ctx):
