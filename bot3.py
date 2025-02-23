@@ -793,9 +793,9 @@ async def dockboot(ctx):
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
     async with ctx.typing():
-                                            #[HHMMSS-MMDDYYYY]
+                                            #[HHMMSS-DDMMYYYY]
         embed = discord.Embed(
-            title=f"DtownBeats - Version 0.3 [044945-14022025]",
+            title=f"DtownBeats - Version 0.3 [074745-23022025]",
             description="🎵 Bringing beats to your server with style!",
             color=discord.Color.dark_blue()
         )
