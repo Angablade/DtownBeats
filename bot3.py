@@ -1234,7 +1234,7 @@ async def bandcamp(ctx, url: str):
     
         await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: {url}")
         file_path = await get_bandcamp_audio(url)
-        if file_path and os.path.exists(file_path):
+        if file_path:
             await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Bandcamp Link}-")
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process Bandcamp track.")
@@ -1255,7 +1255,7 @@ async def soundcloud(ctx, url: str):
     
         await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
         file_path = await get_soundcloud_audio(url)
-        if file_path and os.path.exists(file_path):
+        if file_path:
             await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{SoundCloud Link}-")
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process SoundCloud track.")
@@ -1278,7 +1278,7 @@ async def spotify(ctx, url: str):
         youtube_link = await get_spotify_audio(url)
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
-            if file_path and os.path.exists(file_path):
+            if file_path:
                 await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Spotify Link}-")
             else:
                 await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
@@ -1303,7 +1303,7 @@ async def applemusic(ctx, url: str):
         youtube_link = await get_apple_music_audio(url)
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
-            if file_path and os.path.exists(file_path):
+            if file_path:
                 await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{AppleMusic Link}-")
             else:
                 await messagesender(bot, ctx.channel.id, "Failed to download Apple Music track.")
