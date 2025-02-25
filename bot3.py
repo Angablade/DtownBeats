@@ -1231,7 +1231,6 @@ async def bandcamp(ctx, url: str):
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
 
         await handle_voice_connection(ctx)
-
     
         await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: {url}")
         file_path = await get_bandcamp_audio(url)
@@ -1253,7 +1252,6 @@ async def soundcloud(ctx, url: str):
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
 
         await handle_voice_connection(ctx)
-
     
         await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
         file_path = await get_soundcloud_audio(url)
@@ -1275,7 +1273,6 @@ async def spotify(ctx, url: str):
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
 
         await handle_voice_connection(ctx)
-
     
         await messagesender(bot, ctx.channel.id, f"Processing Spotify link: {url}")
         youtube_link = await get_spotify_audio(url)
@@ -1301,7 +1298,6 @@ async def applemusic(ctx, url: str):
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
 
         await handle_voice_connection(ctx)
-
     
         await messagesender(bot, ctx.channel.id, f"Processing Apple Music link: {url}")
         youtube_link = await get_apple_music_audio(url)
