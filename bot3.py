@@ -345,7 +345,7 @@ async def play_next(ctx, voice_client):
             videoinfo = await server_queues[guild_id].get()
             video_id, video_title = videoinfo[0], videoinfo[1]
 
-            if video_id[:1] = "|":
+            if video_id[:1] == "|":
                 audio_file = video_id[1:]
             else:
                 audio_file = await download_audio(video_id)
