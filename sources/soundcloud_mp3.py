@@ -26,13 +26,13 @@ class SoundCloudAudioStreamer:
                 'preferredcodec': 'mp3',
                 'preferredquality': '320',
             }],
-            'outtmpl': f'{output_path}.mp3',
+            'outtmpl': output_path,
         }
         
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._download_sync, ydl_opts)
-            return output_path
+            return f"{output_path}.mp3"
         except Exception as e:
             print(f"Error downloading SoundCloud audio: {e}")
             return None
