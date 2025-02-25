@@ -36,9 +36,8 @@ class BandcampAudioStreamer:
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._download_sync, ydl_opts)
-            success = os.path.exists(output_path)
             print(f"Download successful: {success}, File: {output_path if success else 'Not Found'}")
-            return output_path if success else None
+            return output_path
         except Exception as e:
             print(f"Error downloading Bandcamp audio: {e}")
             return None
