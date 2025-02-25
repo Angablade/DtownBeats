@@ -1257,7 +1257,7 @@ async def soundcloud(ctx, url: str):
         await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
         file_path = await get_soundcloud_audio(url)
         
-        print file_path
+        print(file_path)
         
         if file_path:
             await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{SoundCloud Link}-")
