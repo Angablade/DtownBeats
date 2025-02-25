@@ -585,7 +585,7 @@ async def fetch_video_id_from_ytsearch(search: str, ctx):
 
 async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
     try:
-        if title = None:
+        if title == None:
             video_title = await get_youtube_video_title(video_id)
             if not video_title:
                 await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
