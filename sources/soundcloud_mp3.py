@@ -47,7 +47,7 @@ async def get_soundcloud_audio(url):
     streamer = SoundCloudAudioStreamer(url)
     return await streamer.download_and_convert()
 
-async def get_soundcloud_title(url)
+async def get_soundcloud_title(url):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
