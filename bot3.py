@@ -341,13 +341,17 @@ async def play_next(ctx, voice_client):
                 await check_empty_channel(ctx)
                 break
 
+
             videoinfo = await server_queues[guild_id].get()
             video_id, video_title = videoinfo[0], videoinfo[1]
 
-            audio_file = await download_audio(video_id)
-            if not audio_file:
-                await messagesender(bot, ctx.channel.id, "Failed to download the track. Skipping...")
-                continue 
+            if video_id[:1] = "|":
+                audio_file = video_id[1:]
+            else:
+                audio_file = await download_audio(video_id)
+                if not audio_file:
+                    await messagesender(bot, ctx.channel.id, "Failed to download the track. Skipping...")
+                    continue 
 
             add_track_to_history(guild_id, video_id, video_title)
             await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
@@ -579,13 +583,17 @@ async def fetch_video_id_from_ytsearch(search: str, ctx):
     return result
 
 
-async def queue_and_play_next(ctx, guild_id: int, video_id: str):
+async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
     try:
-        video_title = await get_youtube_video_title(video_id)
-        if not video_title:
-            await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
-            return
-        
+        if title = None:
+            video_title = await get_youtube_video_title(video_id)
+            if not video_title:
+                await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
+                return
+        else
+            video_title = title
+            video_id = f"|{video_id}"
+
         await server_queues[guild_id].put([video_id, video_title])
         await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
 
@@ -601,8 +609,6 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str):
 
     except Exception as e:
         await messagesender(bot, ctx.channel.id, f"Error adding to queue: {e}")
-
-
 
 @bot.command(name="skip", aliases=["next"])
 async def skip(ctx):
@@ -1230,7 +1236,7 @@ async def bandcamp(ctx, url: str):
         await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: {url}")
         file_path = await get_bandcamp_audio(url)
         if file_path and os.path.exists(file_path):
-            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+            await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Bandcamp Link}-")
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process Bandcamp track.")
 
@@ -1252,7 +1258,7 @@ async def soundcloud(ctx, url: str):
         await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
         file_path = await get_soundcloud_audio(url)
         if file_path and os.path.exists(file_path):
-            await queue_and_play_next(ctx, ctx.guild.id, file_path)
+            await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{SoundCloud Link}-")
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process SoundCloud track.")
 
@@ -1276,7 +1282,7 @@ async def spotify(ctx, url: str):
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
             if file_path and os.path.exists(file_path):
-                await queue_and_play_next(ctx, ctx.guild.id, file_path)
+                await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Spotify Link}-")
             else:
                 await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
         else:
@@ -1302,7 +1308,7 @@ async def applemusic(ctx, url: str):
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
             if file_path and os.path.exists(file_path):
-                await queue_and_play_next(ctx, ctx.guild.id, file_path)
+                await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{AppleMusic Link}-")
             else:
                 await messagesender(bot, ctx.channel.id, "Failed to download Apple Music track.")
         else:
