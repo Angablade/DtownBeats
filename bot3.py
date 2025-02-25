@@ -20,7 +20,7 @@ from utils.lyrics import Lyrics
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio
 from sources.soundcloud_mp3 import get_soundcloud_audio
-from sources.spotify_mp3 import get_spotify_audio
+from sources.spotify_mp3 import get_spotify_audio, get_spotify_title
 from sources.apple_music_mp3 import get_apple_music_audio
 
 from concurrent.futures import ThreadPoolExecutor
@@ -1278,8 +1278,9 @@ async def spotify(ctx, url: str):
         youtube_link = await get_spotify_audio(url)
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
+            spotify_title = await get_spotify_title(url)
             if file_path:
-                await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Spotify Link}-")
+                await queue_and_play_next(ctx, ctx.guild.id, file_path, spotify_title)
             else:
                 await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
         else:
