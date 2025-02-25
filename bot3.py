@@ -1255,10 +1255,11 @@ async def soundcloud(ctx, url: str):
     
         await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
         file_path = await get_soundcloud_audio(url)
+            
         if file_path:
             await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{SoundCloud Link}-")
         else:
-            await messagesender(bot, ctx.channel.id, "Failed to process SoundCloud track.")
+            await messagesender(bot, ctx.channel.id, f"Failed to process SoundCloud track. ({file_path})")
 
 @bot.command(name="spotify")
 async def spotify(ctx, url: str):
