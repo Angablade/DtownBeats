@@ -32,7 +32,7 @@ class SoundCloudAudioStreamer:
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._download_sync, ydl_opts)
-            return output_path if os.path.exists(output_path) else None
+            return output_path
         except Exception as e:
             print(f"Error downloading SoundCloud audio: {e}")
             return None
