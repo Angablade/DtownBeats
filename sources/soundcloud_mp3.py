@@ -2,6 +2,8 @@ import asyncio
 import yt_dlp
 import os
 import re
+import requests
+from bs4 import BeautifulSoup
 
 class SoundCloudAudioStreamer:
     def __init__(self, url):
@@ -44,3 +46,21 @@ class SoundCloudAudioStreamer:
 async def get_soundcloud_audio(url):
     streamer = SoundCloudAudioStreamer(url)
     return await streamer.download_and_convert()
+
+async def get_soundcloud_title(url)
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        title_tag = soup.find("title")
+        title = title_tag["content"] if title_tag else None
+     
+        if title:
+            title = title[7:]
+            return title.replace(" | Listen online for free on SoundCloud","")
+        else:
+            return "-{SoundCloud Link}-"
+    
+    except requests.RequestException:
+        return "-{SoundCloud Link}-"

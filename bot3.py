@@ -19,7 +19,7 @@ from utils.lyrics import Lyrics
 
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio
-from sources.soundcloud_mp3 import get_soundcloud_audio
+from sources.soundcloud_mp3 import get_soundcloud_audio, get_soundcloud_title
 from sources.spotify_mp3 import get_spotify_audio, get_spotify_title
 from sources.apple_music_mp3 import get_apple_music_audio
 
@@ -1256,11 +1256,9 @@ async def soundcloud(ctx, url: str):
     
         await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
         file_path = await get_soundcloud_audio(url)
-        
-        print(file_path)
-        
+        soundcloud_title = await get_soundcloud_title(url)
         if file_path:
-            await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{SoundCloud Link}-")
+            await queue_and_play_next(ctx, ctx.guild.id, file_path, soundcloud_title)
         else:
             await messagesender(bot, ctx.channel.id, f"Failed to process SoundCloud track. ({file_path})")
 
