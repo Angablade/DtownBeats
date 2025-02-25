@@ -26,7 +26,7 @@ class SoundCloudAudioStreamer:
                 'preferredcodec': 'mp3',
                 'preferredquality': '320',
             }],
-            'outtmpl': output_path,
+            'outtmpl': f'{output_path}.mp3',
         }
         
         try:
