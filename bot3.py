@@ -590,7 +590,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
             if not video_title:
                 await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
                 return
-        else
+        else:
             video_title = title
             video_id = f"|{video_id}"
 
