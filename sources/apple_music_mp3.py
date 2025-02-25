@@ -12,7 +12,7 @@ class AppleMusicScraper:
 
     @staticmethod
     def validate_url(url: str) -> bool:
-        return re.match(r'https?://music\.apple\.com/.+/song/.+/\d+', url) is not None
+        return re.match(r'https?://music\.apple\.com/.+/song/.+/.+', url) is not None
 
     async def scrape_metadata(self):
         try:
