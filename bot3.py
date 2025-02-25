@@ -591,6 +591,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
                 await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
                 return
         else:
+            print "Dealing with not youtube here!"
             video_title = title
             video_id = f"|{video_id}"
 
@@ -1255,7 +1256,9 @@ async def soundcloud(ctx, url: str):
     
         await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
         file_path = await get_soundcloud_audio(url)
-            
+        
+        print file_path
+        
         if file_path:
             await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{SoundCloud Link}-")
         else:
