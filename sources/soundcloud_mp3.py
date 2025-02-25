@@ -14,7 +14,7 @@ class SoundCloudAudioStreamer:
         return re.match(r'https?://soundcloud\.com/[\w-]+/[\w-]+', url) is not None
 
     async def download_and_convert(self):
-        output_path = f"music/{self.url.split('/')[-1]}.mp3"
+        output_path = f"music/{self.url.split('/')[-1]}"
         if os.path.exists(output_path):
             print(f"File already cached: {output_path}")
             return output_path
