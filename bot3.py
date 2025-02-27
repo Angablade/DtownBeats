@@ -983,11 +983,13 @@ async def help_command(ctx):
         dockboot  | dockerrestart| Restart Docker container (owner only).
         """, inline=False)
 
-        try:
-            await ctx.author.send(embed=embed)
-            await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the list of commands. 📬")
+        username = ctx.message.author.mention
+        try:   
+            await messagesender(bot, ctx.author.id, embed=embed)
+            #await ctx.author.send(embed=embed)
+            await messagesender(bot, ctx.channel.id, content=f"{username}, I've sent you a DM with the list of commands. 📬")
         except discord.Forbidden:
-            await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
+            await messagesender(bot, ctx.channel.id, content=f"{username}, I couldn't send you a DM. Please check your privacy settings.")
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
