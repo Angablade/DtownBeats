@@ -12,6 +12,9 @@ import aiohttp
 import musicbrainzngs
 import shutil
 import subprocess
+import time
+import platform
+import resource
 
 from utils.voice_utils import start_listening, stop_listening
 from utils.youtube_pl import grab_youtube_pl
@@ -95,6 +98,7 @@ intents.guilds = True
 intents.voice_states = True
 intents.guild_messages = True
 
+start_time = time.time()
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 
 bot.intentional_disconnections = {}
@@ -788,7 +792,7 @@ async def loop(ctx):
         current_tracks[guild_id]["is_looping"] = not current_tracks[guild_id].get("is_looping", False)
         await messagesender(bot, ctx.channel.id, content="Looping " + ("enabled." if current_tracks[guild_id]["is_looping"] else "disabled."))
 
-@bot.command(name="nowplaying", aliases=["current","currentsong","playing"])
+@bot.command(name="nowplaying", aliases=["current","np"])
 async def nowplaying(ctx):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -835,7 +839,7 @@ async def version(ctx):
     async with ctx.typing():
                                             #[HHMMSS-DDMMYYYY]
         embed = discord.Embed(
-            title=f"DtownBeats - Version 0.3 [074745-23022025]",
+            title=f"DtownBeats - Version 0.4 [032241-27022025]",
             description="🎵 Bringing beats to your server with style!",
             color=discord.Color.dark_blue()
         )
@@ -881,7 +885,12 @@ async def help_command(ctx):
         embed.add_field(name="🎵 **Music Commands**", value="""
         **Command**       | **Aliases**       | **Description**
         ------------------|-------------------|------------------------------------------------
-        play <query>      | None              | Play a song or add it to the queue.
+        play <query>      | None              | Play a song, detecting source automatically.
+        youtube <query>   | yt                | Play a YouTube song or playlist.
+        bandcamp <url>    | bc                | Play a track from Bandcamp.
+        soundcloud <url>  | sc                | Play a track from SoundCloud.
+        spotify <url>     | sp                | Play a track from Spotify.
+        applemusic <url>  | ap                | Play a track from Apple Music.
         stop              | None              | Stop the bot and leave the voice channel.
         pause             | hold              | Pause the currently playing track.
         resume            | continue          | Resume the paused track.
@@ -889,24 +898,24 @@ async def help_command(ctx):
         nowplaying        | np, current       | Show details of the current song.
         seek <time/%>     | None              | Seek to a timestamp or percentage.
         volume <0-200>    | vol               | Adjust playback volume (0-200%).
+        shuffle           | None              | Shuffle the queue.
         """, inline=False)
 
         embed.add_field(name="", value="", inline=False)  # Empty space
 
         # ⌚ Queue Commands
         embed.add_field(name="⌚ **Queue Commands**", value="""
-        **Command**   | **Aliases**  | **Description**
-        --------------|--------------|----------------------------------------
-        queue         | list         | Display the current queue.
-        skip          | next         | Skip the currently playing song.
-        clear         | None         | Clear the queue.
-        remove <#>    | None         | Remove a song from the queue.
-        loop          | repeat       | Toggle looping.
-        shuffle       | None         | Shuffle the queue.
-        move <#> <#>  | None         | Move a song in the queue.
-        grablist <q>  | grabplaylist | Grab a user-generated playlist.
-        history       | played       | Show recently played tracks.
-        autoplay      | autodj       | Toggle autoplay mode.
+        **Command**       | **Aliases**  | **Description**
+        ------------------|--------------|----------------------------------------
+        queue             | list         | Display the current queue.
+        skip              | next         | Skip the currently playing song.
+        clear             | None         | Clear the queue.
+        remove <#>        | None         | Remove a song from the queue.
+        loop              | repeat       | Toggle looping.
+        move <#> <#>      | None         | Move a song in the queue.
+        grablist <q>      | grabplaylist | Grab a user-generated playlist.
+        history           | played       | Show recently played tracks.
+        autoplay <on/off> | autodj       | Toggle autoplay mode.
         """, inline=False)
 
         embed.add_field(name="", value="", inline=False)  # Empty space
@@ -928,28 +937,15 @@ async def help_command(ctx):
         ------------------|------------------------|----------------------------
         listen            | Music bot listen       | Enable voice command mode.
         unlisten          | Music bot unlisten     | Disable voice command mode.
-        play <query>      | Music bot play <q>     | Play a song via voice command.
-        pause             | Music bot pause        | Pause playback.
-        resume            | Music bot resume       | Resume playback.
-        stop              | Music bot stop         | Stop and leave voice.
-        skip              | Music bot skip         | Skip the current song.
-        volume up         | Music bot volume up    | Increase volume.
-        volume down       | Music bot volume down  | Decrease volume.
-        shuffle           | Music bot shuffle      | Shuffle the queue.
-        clear queue       | Music bot clear queue  | Clear the queue.
-        loop              | Music bot loop         | Toggle looping.
-        autoplay on       | Music bot autoplay on  | Enable autoplay mode.
-        autoplay off      | Music bot autoplay off | Disable autoplay mode.
-        leave             | Music bot leave        | Disconnect from voice.
         """, inline=False)
 
         embed.add_field(name="", value="", inline=False)  # Empty space
 
         # 📜 Lyrics Commands
         embed.add_field(name="📜 **Lyrics Commands**", value="""
-        **Command** | **Aliases** | **Description**
-        ------------|-------------|-------------------------------------------
-        lyrics <song> | None    | Fetch lyrics for the specified/current song.
+        **Command**   | **Aliases** | **Description**
+        --------------|-------------|-------------------------------------------
+        lyrics <song> | None        | Fetch lyrics for the specified/current song.
         """, inline=False)
 
         embed.add_field(name="", value="", inline=False)  # Empty space
@@ -960,7 +956,7 @@ async def help_command(ctx):
         ------------------|--------------|------------------------------------
         setprefix <p>     | prefix       | Change the bot's prefix.
         setdjrole <r>     | setrole      | Assign a DJ role.
-        setchannel <c>    | None         | Restrict commands to a channel.
+        setchannel <c>    | None         | Restrict bot commands to a channel.
         """, inline=False)
 
         embed.add_field(name="", value="", inline=False)  # Empty space
@@ -972,6 +968,8 @@ async def help_command(ctx):
         version     | ver         | DM the bot version info.
         sendplox    | None        | DM the current track as a file.
         commands    | cmds        | DM this command list.
+        stats       | None        | Display bot uptime, memory usage, and server count.
+        invite      | link        | Get an invite link for the bot.
         """, inline=False)
 
         embed.add_field(name="", value="", inline=False)  # Empty space
@@ -990,8 +988,6 @@ async def help_command(ctx):
             await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the list of commands. 📬")
         except discord.Forbidden:
             await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
-
-
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
@@ -1381,6 +1377,24 @@ async def autoplay(ctx, mode: str):
         status = "enabled" if autoplay_enabled[guild_id] else "disabled"
         await messagesender(bot, ctx.channel.id, f"Autoplay is now {status} for this server.")
 
+@bot.command(name="stats")
+async def stats(ctx):
+    uptime = time.time() - start_time
+    server_count = len(bot.guilds)
+
+    if platform.system() == "Windows":
+        process = os.popen('wmic process where "ProcessId=%d" get WorkingSetSize' % os.getpid())
+        memory_usage = int(process.read().strip().split("\n")[-1]) / (1024 * 1024)
+        process.close()
+    else:
+        memory_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
+    embed = discord.Embed(title="📊 Bot Stats", color=discord.Color.green())
+    embed.add_field(name="⏳ Uptime", value=f"{int(uptime // 3600)}h {int((uptime % 3600) // 60)}m {int(uptime % 60)}s", inline=False)
+    embed.add_field(name="💾 Memory Usage", value=f"{memory_usage:.2f} MB", inline=False)
+    embed.add_field(name="🏠 Servers", value=f"{server_count} servers", inline=False)
+
+    await ctx.send(embed=embed)
 
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
