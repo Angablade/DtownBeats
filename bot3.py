@@ -518,14 +518,14 @@ async def play(ctx, *, srch: str):
             "youtube": r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/.*"
         }
 
-        if re.match(patterns["bandcamp"], search):
-            await bandcamp(ctx, search)
-        elif re.match(patterns["soundcloud"], search):
-            await soundcloud(ctx, search)
-        elif re.match(patterns["spotify"], search):
-            await spotify(ctx, search)
-        elif re.match(patterns["applemusic"], search):
-            await applemusic(cxx, search)
+        if re.match(patterns["bandcamp"], srch):
+            await bandcamp(ctx, srch)
+        elif re.match(patterns["soundcloud"], srch):
+            await soundcloud(ctx, srch)
+        elif re.match(patterns["spotify"], srch):
+            await spotify(ctx, srch)
+        elif re.match(patterns["applemusic"], srch):
+            await applemusic(cxx, srch)
         else:
             await youtube(ctx, search=srch)
 
