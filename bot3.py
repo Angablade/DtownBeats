@@ -492,8 +492,41 @@ async def playlister(ctx, *, search: str = None):
         else:
             await messagesender(bot, ctx.channel.id, "No search query entered!")
 
-@bot.command(name="play", aliases=["youtube"])
-async def play(ctx, *, search: str = None):
+@bot.command(name="play")
+async def play(ctx, *, search: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+        patterns = {
+            "bandcamp": r"https?://.*bandcamp\.com/.*",
+            "soundcloud": r"https?://.*soundcloud\.com/.*",
+            "spotify": r"https?://.*spotify\.com/.*",
+            "applemusic": r"https?://.*music\.apple\.com/.*",
+            "youtube": r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/.*"
+        }
+
+        if re.match(patterns["bandcamp"], search):
+            await bandcamp(ctx, search)
+        elif re.match(patterns["soundcloud"], search):
+            await soundcloud(ctx, search)
+        elif re.match(patterns["spotify"], search):
+            await spotify(ctx, search)
+        elif re.match(patterns["applemusic"], search):
+            await applemusic(ctx, search)
+        else:
+            await youtube(ctx, search)
+
+@bot.command(name="youtube", aliases=["yt"])
+async def youtube(ctx, *, search: str = None):
     async with ctx.typing():
         guild_id = ctx.guild.id
     
@@ -1182,7 +1215,7 @@ async def leave_channel(ctx):
         else:
             await messagesender(bot, ctx.channel.id, content="I'm not in a voice channel to leave.")
 
-@bot.command(name="sendplox")
+@bot.command(name="sendplox", aliases=["dlfile"])
 async def sendmp3(ctx):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -1219,7 +1252,7 @@ async def sendmp3(ctx):
                 await ctx.author.typing()
                 await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
 
-@bot.command(name="bandcamp")
+@bot.command(name="bandcamp", aliases=["bc"])
 async def bandcamp(ctx, url: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -1240,7 +1273,7 @@ async def bandcamp(ctx, url: str):
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process Bandcamp track.")
 
-@bot.command(name="soundcloud")
+@bot.command(name="soundcloud", aliases=["sc"])
 async def soundcloud(ctx, url: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -1262,7 +1295,7 @@ async def soundcloud(ctx, url: str):
         else:
             await messagesender(bot, ctx.channel.id, f"Failed to process SoundCloud track. ({file_path})")
 
-@bot.command(name="spotify")
+@bot.command(name="spotify", aliases=["sp"])
 async def spotify(ctx, url: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -1288,7 +1321,7 @@ async def spotify(ctx, url: str):
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process Spotify track.")
 
-@bot.command(name="applemusic")
+@bot.command(name="applemusic", aliases=["ap"])
 async def applemusic(ctx, url: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
