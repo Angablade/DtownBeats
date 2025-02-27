@@ -497,7 +497,7 @@ async def playlister(ctx, *, search: str = None):
             await messagesender(bot, ctx.channel.id, "No search query entered!")
 
 @bot.command(name="play")
-async def play(ctx, *, search: str):
+async def play(ctx, *, srch: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
 
@@ -519,15 +519,15 @@ async def play(ctx, *, search: str):
         }
 
         if re.match(patterns["bandcamp"], search):
-            await bandcamp(search)
+            await bandcamp(ctx, search)
         elif re.match(patterns["soundcloud"], search):
-            await soundcloud(search)
+            await soundcloud(ctx, search)
         elif re.match(patterns["spotify"], search):
-            await spotify(search)
+            await spotify(ctx, search)
         elif re.match(patterns["applemusic"], search):
-            await applemusic(search)
+            await applemusic(cxx, search)
         else:
-            await youtube(search)
+            await youtube(ctx, search=srch)
 
 @bot.command(name="youtube", aliases=["yt"])
 async def youtube(ctx, *, search: str = None):
