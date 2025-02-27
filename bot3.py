@@ -519,15 +519,15 @@ async def play(ctx, *, search: str):
         }
 
         if re.match(patterns["bandcamp"], search):
-            await ctx.invoke(bot.get_command("bandcamp"), search)
+            await bandcamp(search)
         elif re.match(patterns["soundcloud"], search):
-            await ctx.invoke(bot.get_command("soundcloud"), search)
+            await soundcloud(search)
         elif re.match(patterns["spotify"], search):
-            await ctx.invoke(bot.get_command("spotify"), search)
+            await spotify(search)
         elif re.match(patterns["applemusic"], search):
-            await ctx.invoke(bot.get_command("applemusic"), search)
+            await applemusic(search)
         else:
-            await ctx.invoke(bot.get_command("youtube"), search)
+            await youtube(search)
 
 @bot.command(name="youtube", aliases=["yt"])
 async def youtube(ctx, *, search: str = None):
