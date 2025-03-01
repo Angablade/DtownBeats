@@ -370,7 +370,26 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         raise ValueError("Out of bounds error: This content is not allowed.")
         return
 
-    await messagesender(bot, ctx.channel.id, f"Now playing: `{video_title}`")
+    search_results = search_musicbrainz(video_title)
+    if search_results:
+        track_info = search_results[0]
+        artist = track_info.get("artist", "Unknown Artist")
+        title = track_info.get("title", video_title)
+        duration = int(track_info.get("duration", 0)) // 1000
+        album_art = track_info.get("album_art", "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg")
+    else:
+        artist, title, duration, album_art = "Unknown Artist", video_title, 0, "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg"
+
+    embed = discord.Embed(
+        title="Now Playing 🎵",
+        description=f"**{title}**",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=album_art)
+    embed.add_field(name="Artist", value=artist, inline=True)
+    embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
+    
+    await messagesender(bot, ctx.channel.id, embed=embed)
 
     current_tracks[guild_id]["current_track"] = [video_id, video_title]
 
@@ -798,12 +817,34 @@ async def nowplaying(ctx):
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
-        
+
         current_track = current_tracks.get(guild_id, {}).get("current_track")
-        if current_track:
-            await messagesender(bot, ctx.channel.id, f"Currently playing: {''.join(current_track[1:])}")
-        else:
+        if not current_track:
             await messagesender(bot, ctx.channel.id, content="No track is currently playing.")
+            return
+
+        video_title = current_track[1]
+        search_results = search_musicbrainz(video_title)
+        
+        if search_results:
+            track_info = search_results[0]  
+            artist = track_info.get("artist", "Unknown Artist")
+            title = track_info.get("title", video_title)
+            duration = int(track_info.get("duration", 0)) // 1000 
+            album_art = track_info.get("album_art", "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg") 
+        else:
+            artist, title, duration, album_art = "Unknown Artist", video_title, 0, "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg"
+
+        embed = discord.Embed(
+            title="Now Playing 🎵",
+            description=f"**{title}**",
+            color=discord.Color.blue()
+        )
+        embed.set_thumbnail(url=album_art)
+        embed.add_field(name="Artist", value=artist, inline=True)
+        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
+        
+        await messagesender(bot, ctx.channel.id, embed=embed)
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):
@@ -1266,6 +1307,7 @@ async def bandcamp(ctx, url: str):
     
         await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: {url}")
         file_path = await get_bandcamp_audio(url)
+        await messagesender(bot, ctx.channel.id, file_path)
         if file_path:
             await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Bandcamp Link}-")
         else:
