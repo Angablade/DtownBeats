@@ -21,7 +21,7 @@ from utils.youtube_pl import grab_youtube_pl
 from utils.lyrics import Lyrics
 
 from sources.youtube_mp3 import get_audio_filename
-from sources.bandcamp_mp3 import get_bandcamp_audio, get_soundcloud_title
+from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
 from sources.soundcloud_mp3 import get_soundcloud_audio, get_soundcloud_title
 from sources.spotify_mp3 import get_spotify_audio, get_spotify_title
 from sources.apple_music_mp3 import get_apple_music_audio
