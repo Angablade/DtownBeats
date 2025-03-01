@@ -372,7 +372,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     search_results = search_musicbrainz(video_title)
     if search_results:
-        track_info = search_results[0]
+        track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0])
         artist = track_info.get("artist", "Unknown Artist")
         title = track_info.get("title", video_title)
         duration = int(track_info.get("duration", 0)) // 1000
@@ -767,11 +767,11 @@ async def search(ctx, *, query: str):
                     return
             
                 embed = discord.Embed(title=f"Search Results: {query}", color=discord.Color.green())
-                for entry in results[:5]:
+                for entry in results[:10]:
                     video_id = entry['id']
                     video_title = entry['title']
                 
-                    embed.add_field(name=video_title, value=f"```{ctx.prefix}play {video_id}```", inline=False)
+                    embed.add_field(name=video_title, value=f"```{ctx.prefix}yt {video_id}```", inline=False)
                 await messagesender(bot, ctx.channel.id, embed=embed)
         
             except Exception as e:
@@ -827,7 +827,7 @@ async def nowplaying(ctx):
         search_results = search_musicbrainz(video_title)
         
         if search_results:
-            track_info = search_results[0]  
+            track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0]) 
             artist = track_info.get("artist", "Unknown Artist")
             title = track_info.get("title", video_title)
             duration = int(track_info.get("duration", 0)) // 1000 
@@ -1307,7 +1307,7 @@ async def bandcamp(ctx, url: str):
     
         await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: {url}")
         file_path = await get_bandcamp_audio(url)
-        await messagesender(bot, ctx.channel.id, file_path)
+        await messagesender(bot, ctx.channel.id, f"Downloaded file: `{file_path}`" if file_path else "Failed to download Bandcamp track.")
         if file_path:
             await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Bandcamp Link}-")
         else:
