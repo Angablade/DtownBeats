@@ -381,7 +381,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         artist, title, duration, album_art = "Unknown Artist", video_title, 0, "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg"
 
     embed = discord.Embed(
-        title="Now Playing 🎵",
+        title="Now Playing",
         description=f"**{title}**",
         color=discord.Color.blue()
     )
@@ -836,7 +836,7 @@ async def nowplaying(ctx):
             artist, title, duration, album_art = "Unknown Artist", video_title, 0, "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg"
 
         embed = discord.Embed(
-            title="Now Playing 🎵",
+            title="Now Playing",
             description=f"**{title}**",
             color=discord.Color.blue()
         )

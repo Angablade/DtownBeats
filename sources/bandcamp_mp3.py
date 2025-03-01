@@ -17,12 +17,11 @@ class BandcampAudioStreamer:
         return valid
 
     async def download_and_convert(self):
-        output_path = f"music/{self.url.split('/')[-1]}.mp3"
+        output_path = f"music/{self.url.split('/')[-1]}"
         if os.path.exists(output_path):
             print(f"File already cached: {output_path}")
             return output_path
         
-        print(f"Starting download for: {self.url}")
         ydl_opts = {
             'format': 'bestaudio/best',
             'postprocessors': [{
@@ -30,14 +29,13 @@ class BandcampAudioStreamer:
                 'preferredcodec': 'mp3',
                 'preferredquality': '320',
             }],
-            'outtmpl': 'music/%(title)s.%(ext)s',
+            'outtmpl': output_path,
         }
         
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._download_sync, ydl_opts)
-            print(f"Download successful: {success}, File: {output_path if success else 'Not Found'}")
-            return output_path
+            return f"{output_path}.mp3"
         except Exception as e:
             print(f"Error downloading Bandcamp audio: {e}")
             return None
