@@ -1354,8 +1354,8 @@ async def spotify(ctx, url: str):
         youtube_link = await get_spotify_audio(url)
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
-            spotify_title = await get_spotify_title(url)
             if file_path:
+                spotify_title = await get_spotify_title(url)
                 await queue_and_play_next(ctx, ctx.guild.id, file_path, spotify_title)
             else:
                 await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
