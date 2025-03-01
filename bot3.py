@@ -1309,7 +1309,7 @@ async def bandcamp(ctx, url: str):
         file_path = await get_bandcamp_audio(url)
         await messagesender(bot, ctx.channel.id, f"Downloaded file: `{file_path}`" if file_path else "Failed to download Bandcamp track.")
         if file_path:
-            await trackdata = get_bandcamp_title(url)
+            trackdata = await get_bandcamp_title(url)
             await queue_and_play_next(ctx, ctx.guild.id, file_path, trackdata)
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process Bandcamp track.")
