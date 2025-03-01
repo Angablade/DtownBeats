@@ -2,6 +2,8 @@ import asyncio
 import yt_dlp
 import os
 import re
+import aiohttp
+from bs4 import BeautifulSoup
 
 class BandcampAudioStreamer:
     def __init__(self, url):
@@ -50,3 +52,30 @@ async def get_bandcamp_audio(url):
     print(f"Fetching Bandcamp audio for URL: {url}")
     streamer = BandcampAudioStreamer(url)
     return await streamer.download_and_convert()
+
+async def get_bandcamp_title(url):
+    pattern = re.compile(r"https?://[\w.-]+\.bandcamp\.com/track/[\w-]+")
+
+    if not pattern.match(url):
+        return "-{Bandcamp Link}-"
+
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                soup = BeautifulSoup(await response.text(), "html.parser")
+
+        track = soup.find("h2", class_="trackTitle").text.strip()
+        album = soup.find("span", class_="fromAlbum").text.strip()
+        artist = soup.find("h3", class_="albumTitle").find_all("a")[-1].text.strip()
+
+        if artist and track:
+            return f"{artist} - {album} - {track}"
+        else:
+            return "-{Bandcamp Link}-"
+
+    except aiohttp.ClientError as e:
+        return "-{Bandcamp Link}-"
+    except AttributeError:
+        return "-{Bandcamp Link}-"
