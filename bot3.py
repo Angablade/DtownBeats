@@ -21,7 +21,7 @@ from utils.youtube_pl import grab_youtube_pl
 from utils.lyrics import Lyrics
 
 from sources.youtube_mp3 import get_audio_filename
-from sources.bandcamp_mp3 import get_bandcamp_audio
+from sources.bandcamp_mp3 import get_bandcamp_audio, get_soundcloud_title
 from sources.soundcloud_mp3 import get_soundcloud_audio, get_soundcloud_title
 from sources.spotify_mp3 import get_spotify_audio, get_spotify_title
 from sources.apple_music_mp3 import get_apple_music_audio
@@ -1309,7 +1309,8 @@ async def bandcamp(ctx, url: str):
         file_path = await get_bandcamp_audio(url)
         await messagesender(bot, ctx.channel.id, f"Downloaded file: `{file_path}`" if file_path else "Failed to download Bandcamp track.")
         if file_path:
-            await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{Bandcamp Link}-")
+            await trackdata = get_bandcamp_title(url)
+            await queue_and_play_next(ctx, ctx.guild.id, file_path, trackdata)
         else:
             await messagesender(bot, ctx.channel.id, "Failed to process Bandcamp track.")
 
