@@ -79,26 +79,6 @@ class AlbumArtFetcher:
                 logging.error(f"Failed to fetch YouTube results: {e}")
         return None
 
-    def _fetch_image_url_unsplash(self, query):
-        """Fetch album art from Unsplash using their search results (scraping)."""
-        search_url = f"https://unsplash.com/s/photos/{quote(query)}"
-        try:
-            logging.info(f"Fetching image from Unsplash for query: {query}")
-            response = requests.get(search_url, headers=self.HEADERS)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to fetch Unsplash search results: {e}")
-            return None
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        img_tag = soup.find("img", {"class": "_2zEKz"})
-        if img_tag and "src" in img_tag.attrs:
-            img_url = img_tag["src"]
-            logging.info(f"Found image URL from Unsplash: {img_url}")
-            return img_url
-        logging.warning(f"No image found in Unsplash search results for query: {query}")
-        return None
-
     def _download_image(self, url, save_path):
         """Download and save the image."""
         try:
@@ -125,8 +105,6 @@ class AlbumArtFetcher:
         image_url = self._fetch_image_url_google(query)
         if not image_url:
             image_url = self._fetch_image_url_youtube(query)
-        if not image_url:
-            image_url = self._fetch_image_url_unsplash(query)
 
         if image_url:
             self._download_image(image_url, cache_path)
