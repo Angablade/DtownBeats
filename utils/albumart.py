@@ -19,7 +19,6 @@ class AlbumArtFetcher:
         if not os.path.exists(self.CACHE_DIR):
             os.makedirs(self.CACHE_DIR)
 
-        # Setup logging
         logging.basicConfig(
             filename=self.LOG_FILE,
             level=logging.DEBUG,
@@ -36,47 +35,24 @@ class AlbumArtFetcher:
         return os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path)) < self.CACHE_EXPIRY
 
     def _fetch_image_url_google(self, query):
-        """Fetch the first image result URL from Google Images within the 'search' div."""
-        search_url = f"https://www.google.com/search?hl=en&tbm=isch&q={quote(query)}"
-        try:
-            logging.info(f"Fetching image from Google Images for query: {query}")
-            response = requests.get(search_url, headers=self.HEADERS)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to fetch Google search results: {e}")
-            return None
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        search_div = soup.find("div", {"id": "search"})
-        
-        if search_div:
-            img_tag = search_div.find("img")
-            if img_tag and "src" in img_tag.attrs:
-                img_url = img_tag["src"]
-                logging.info(f"Found image URL from Google: {img_url}")
-                return img_url
-        logging.warning(f"No image found in Google search results for query: {query}")
-        return None
-
-    def _fetch_image_url_youtube(self, query):
-        """Fetch album art from YouTube video thumbnail using yt-dlp."""
-        ydl_opts = {
-            'quiet': True,
-            'extract_flat': True,
-            'force_generic_extractor': True,
+        url = f"https://www.google.com/search?client=firefox-b-1-d&q={query.replace(" ", "+")}+album&udm=2"
+        headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'max-age=0'
         }
+    
+        response = requests.get(url, headers=headers)
+    
+        cont = response.text.split('"')
+        for itm in cont:
+            if itm.startswith("http"):
+                if ".jpg" in itm:
+                    return itm 
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            search_url = f"https://www.youtube.com/results?search_query={quote(query)}"
-            logging.info(f"Fetching image from YouTube for query: {query}")
-            try:
-                info_dict = ydl.extract_info(search_url, download=False)
-                if 'thumbnail' in info_dict:
-                    img_url = info_dict['thumbnail']
-                    logging.info(f"Found image URL from YouTube: {img_url}")
-                    return img_url
-            except Exception as e:
-                logging.error(f"Failed to fetch YouTube results: {e}")
         return None
 
     def _download_image(self, url, save_path):
@@ -101,10 +77,7 @@ class AlbumArtFetcher:
             logging.info(f"Cache hit for query: {query}. Returning cached image.")
             return cache_path
 
-        # Try fetching the image from multiple sources
         image_url = self._fetch_image_url_google(query)
-        if not image_url:
-            image_url = self._fetch_image_url_youtube(query)
 
         if image_url:
             self._download_image(image_url, cache_path)
