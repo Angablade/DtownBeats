@@ -26,16 +26,21 @@ class AlbumArtFetcher:
         return os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path)) < self.CACHE_EXPIRY
 
     def _fetch_image_url(self, query):
-        """Fetch the first image result URL from Google Images."""
+        """Fetch the first image result URL from Google Images within the 'search' div."""
         search_url = f"https://www.google.com/search?hl=en&tbm=isch&q={quote(query)}"
-        response = requests.get(search_url, headers=self.HEADERS)
-        if response.status_code != 200:
-            raise Exception("Failed to fetch search results.")
+        try:
+            response = requests.get(search_url, headers=self.HEADERS)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to fetch search results: {e}")
 
         soup = BeautifulSoup(response.text, "html.parser")
-        img_tag = soup.find("img")
-        if img_tag and "src" in img_tag.attrs:
-            return img_tag["src"]
+        search_div = soup.find("div", {"id": "search"})
+        
+        if search_div:
+            img_tag = search_div.find("img") 
+            if img_tag and "src" in img_tag.attrs:
+                return img_tag["src"]
         return None
 
     def _download_image(self, url, save_path):
