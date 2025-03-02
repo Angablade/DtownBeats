@@ -916,7 +916,7 @@ async def version(ctx):
     async with ctx.typing():
                                             #[HHMMSS-DDMMYYYY]
         embed = discord.Embed(
-            title=f"DtownBeats - Version 0.4 [032241-27022025]",
+            title=f"DtownBeats - Version 0.4A [213016-01032025]",
             description="🎵 Bringing beats to your server with style!",
             color=discord.Color.dark_blue()
         )
