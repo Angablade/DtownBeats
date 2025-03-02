@@ -1396,8 +1396,6 @@ async def soundcloud(ctx, url: str):
         else:
             await messagesender(bot, ctx.channel.id, f"Failed to process SoundCloud track. ({file_path})")
 
-from spotify_mp3 import get_spotify_tracks_from_playlist
-
 @bot.command(name="spotify", aliases=["sp"])
 async def spotify(ctx, url: str):
     async with ctx.typing():
