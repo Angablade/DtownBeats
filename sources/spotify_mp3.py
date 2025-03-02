@@ -4,6 +4,7 @@ import re
 import subprocess
 import requests
 from bs4 import BeautifulSoup
+from spotdl import Spotdl
 
 class SpotifyAudioConverter:
     def __init__(self, url):
@@ -35,6 +36,11 @@ async def get_spotify_audio(url):
     converter = SpotifyAudioConverter(url)
     return await converter.convert_to_youtube()
 
+async def get_spotify_tracks_from_playlist(playlist_url):
+    spotdl = Spotdl()
+    songs = spotdl.search([playlist_url])
+    track_urls = [song.url for song in songs]
+    return track_urls
 
 async def get_spotify_title(url):
     pattern = re.compile(r"https://open\.spotify\.com/track/[a-zA-Z0-9]+(?:\?si=[a-zA-Z0-9]+)?")

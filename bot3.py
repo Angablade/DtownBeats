@@ -24,7 +24,7 @@ from utils.albumart import AlbumArtFetcher
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
 from sources.soundcloud_mp3 import get_soundcloud_audio, get_soundcloud_title
-from sources.spotify_mp3 import get_spotify_audio, get_spotify_title
+from sources.spotify_mp3 import get_spotify_audio, get_spotify_title, get_spotify_tracks_from_playlist
 from sources.apple_music_mp3 import get_apple_music_audio
 
 from concurrent.futures import ThreadPoolExecutor
@@ -653,30 +653,48 @@ async def fetch_video_id(ctx, search: str) -> str:
 
 async def fetch_video_id_from_ytsearch(search: str, ctx):
     loop = asyncio.get_running_loop()
-    ydl_opts = {
-        "default_search": "ytsearch1",
-        "quiet": True,
-        "no_warnings": True 
-    }
-
-    def run_yt_dlp():
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    
+    def run_yt_dlp(opts):
+        with yt_dlp.YoutubeDL(opts) as ydl:
             try:
                 info = ydl.extract_info(search, download=False)
-                if "entries" not in info or not info["entries"]: 
+                if "entries" not in info or not info["entries"]:
                     return None
                 return info["entries"][0]["id"]
-            except Exception as e:
-                return None 
-
-    result = await loop.run_in_executor(executor, run_yt_dlp)
-
+            except Exception:
+                return None
+    
+    ydl_opts_music = {
+        "default_search": "ytsearch1",
+        "quiet": True,
+        "no_warnings": True,
+        "youtube_include_dash_manifest": False,
+        "extract_flat": True,
+        "source_address": "0.0.0.0",
+        "geo_bypass": True,
+        "noplaylist": True,
+        "force_generic_extractor": True,
+        "format": "bestaudio",
+        "cookiesfrombrowser": ("chrome",),
+        "youtube_include_hls_manifest": False,
+        "force_url": "https://music.youtube.com/"
+    }
+    
+    result = await loop.run_in_executor(None, lambda: run_yt_dlp(ydl_opts_music))
+    
+    if not result:
+        ydl_opts_regular = {
+            "default_search": "ytsearch1",
+            "quiet": True,
+            "no_warnings": True,
+        }
+        result = await loop.run_in_executor(None, lambda: run_yt_dlp(ydl_opts_regular))
+    
     if not result:
         await messagesender(bot, ctx.channel.id, f"Failed to find a song for: `{search}`")
         return None
-
+    
     return result
-
 
 async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
     try:
@@ -1382,7 +1400,7 @@ async def soundcloud(ctx, url: str):
 async def spotify(ctx, url: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
-    
+
         if not await check_perms(ctx, guild_id):
             return
 
@@ -1391,18 +1409,30 @@ async def spotify(ctx, url: str):
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
 
         await handle_voice_connection(ctx)
-    
-        await messagesender(bot, ctx.channel.id, f"Processing Spotify link: {url}")
-        youtube_link = await get_spotify_audio(url)
-        if youtube_link:
-            file_path = await get_audio_filename(youtube_link)
-            if file_path:
-                spotify_title = await get_spotify_title(url)
-                await queue_and_play_next(ctx, ctx.guild.id, file_path, spotify_title)
+
+        track_urls = [url]
+
+        if "playlist" in url:
+            await messagesender(bot, ctx.channel.id, f"Processing Spotify playlist: {url}")
+            track_urls = await get_spotify_tracks_from_playlist(url)
+
+            if not track_urls:
+                await messagesender(bot, ctx.channel.id, "Failed to process Spotify playlist.")
+                return
+
+        for track_url in track_urls:
+            await messagesender(bot, ctx.channel.id, f"Processing Spotify track: {track_url}")
+            youtube_link = await get_spotify_audio(track_url)
+
+            if youtube_link:
+                file_path = await get_audio_filename(youtube_link)
+                if file_path:
+                    spotify_title = await get_spotify_title(track_url)
+                    await queue_and_play_next(ctx, ctx.guild.id, file_path, spotify_title)
+                else:
+                    await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
             else:
-                await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
-        else:
-            await messagesender(bot, ctx.channel.id, "Failed to process Spotify track.")
+                await messagesender(bot, ctx.channel.id, "Failed to process Spotify track.")
 
 @bot.command(name="applemusic", aliases=["ap"])
 async def applemusic(ctx, url: str):
