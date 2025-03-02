@@ -14,7 +14,7 @@ class AlbumArtFetcher:
 
     def __init__(self):
         if not os.path.exists(self.CACHE_DIR):
-            os.makedirs(self.CACHE_DIR)
+            os.makedirs(self.CACHE_DIR, exist_ok=True)
 
     def _get_cache_path(self, query):
         """Generate a cache file path using a hash of the query."""
@@ -23,7 +23,14 @@ class AlbumArtFetcher:
 
     def _is_cache_valid(self, cache_path):
         """Check if the cached image is still valid."""
-        return os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path)) < self.CACHE_EXPIRY
+        if os.path.exists(cache_path):
+            print(f"Cache exists: {cache_path}")
+            if (time.time() - os.path.getmtime(cache_path)) < self.CACHE_EXPIRY:
+                print(f"Cache is valid: {cache_path}")
+                return True
+        print(f"Cache is invalid: {cache_path}")
+        return False
+
 
     def _fetch_image_url(self, query):
         """Fetch the first image result URL from Google Images within the 'search' div."""
@@ -48,16 +55,23 @@ class AlbumArtFetcher:
         """Download and save the image."""
         response = requests.get(url, headers=self.HEADERS)
         if response.status_code == 200:
-            image = Image.open(BytesIO(response.content))
-            image.save(save_path, "JPEG")
+            try:
+                image = Image.open(BytesIO(response.content))
+                image.save(save_path, "JPEG")
+            except Exception as e:
+                print(f"Error saving image: {e}")
+        else:
+            print(f"Failed to download image: {response.status_code}")
+
 
     def get_album_art(self, query):
         """Main function to get album art, using cache if available."""
         cache_path = self._get_cache_path(query)
+        
+        print(cache_path)
 
         if self._is_cache_valid(cache_path):
             return cache_path  
-
 
         image_url = self._fetch_image_url(query)
         print(f"image url: {image_url}")
