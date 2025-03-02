@@ -1396,6 +1396,8 @@ async def soundcloud(ctx, url: str):
         else:
             await messagesender(bot, ctx.channel.id, f"Failed to process SoundCloud track. ({file_path})")
 
+from spotify_mp3 import get_spotify_tracks_from_playlist
+
 @bot.command(name="spotify", aliases=["sp"])
 async def spotify(ctx, url: str):
     async with ctx.typing():
@@ -1410,29 +1412,37 @@ async def spotify(ctx, url: str):
 
         await handle_voice_connection(ctx)
 
-        track_urls = [url]
+        track_urls = [url]  # Default to a single track
 
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Processing Spotify playlist: {url}")
-            track_urls = await get_spotify_tracks_from_playlist(url)
-
-            if not track_urls:
-                await messagesender(bot, ctx.channel.id, "Failed to process Spotify playlist.")
+            try:
+                track_urls = await get_spotify_tracks_from_playlist(url)
+                if not track_urls:
+                    await messagesender(bot, ctx.channel.id, "Failed to retrieve tracks from Spotify playlist.")
+                    return
+            except Exception as e:
+                await messagesender(bot, ctx.channel.id, f"Error processing playlist: {e}")
                 return
 
         for track_url in track_urls:
-            await messagesender(bot, ctx.channel.id, f"Processing Spotify track: {track_url}")
-            youtube_link = await get_spotify_audio(track_url)
+            try:
+                await messagesender(bot, ctx.channel.id, f"Processing Spotify track: {track_url}")
+                youtube_link = await get_spotify_audio(track_url)
 
-            if youtube_link:
-                file_path = await get_audio_filename(youtube_link)
-                if file_path:
-                    spotify_title = await get_spotify_title(track_url)
-                    await queue_and_play_next(ctx, ctx.guild.id, file_path, spotify_title)
+                if youtube_link:
+                    file_path = await get_audio_filename(youtube_link)
+                    if file_path:
+                        spotify_title = await get_spotify_title(track_url)
+                        await queue_and_play_next(ctx, ctx.guild.id, file_path, spotify_title)
+                    else:
+                        await messagesender(bot, ctx.channel.id, f"Failed to download Spotify track: {track_url}")
                 else:
-                    await messagesender(bot, ctx.channel.id, "Failed to download Spotify track.")
-            else:
-                await messagesender(bot, ctx.channel.id, "Failed to process Spotify track.")
+                    await messagesender(bot, ctx.channel.id, f"Failed to process Spotify track: {track_url}")
+
+            except Exception as e:
+                await messagesender(bot, ctx.channel.id, f"Error processing track {track_url}: {e}")
+
 
 @bot.command(name="applemusic", aliases=["ap"])
 async def applemusic(ctx, url: str):
