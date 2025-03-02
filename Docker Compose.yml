@@ -9,6 +9,7 @@ services:
       - /path/to/music:/app/music
       - /path/to/config:/app/config
       - /path/to/models:/app/models
+      - /path/to/albumart:/app/albumart
     environment:
       - MUSICBRAINZ_USERAGENT="dtownbeats"
       - MUSICBRAINZ_VERSION="1.1"

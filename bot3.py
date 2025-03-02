@@ -413,6 +413,10 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         artist, title, duration = "Unknown Artist", video_title, 0
     
     image_path = fetcher.get_album_art(video_title)
+
+    if not image_path:
+        image_path = "/app/albumart/default.jpg"
+
     file = discord.File(image_path, filename="album_art.jpg")
 
     embed = discord.Embed(
@@ -869,6 +873,9 @@ async def nowplaying(ctx):
             artist, title, duration = "Unknown Artist", video_title, 0
     
         image_path = fetcher.get_album_art(video_title)
+        if not image_path:
+            image_path = "/app/albumart/default.jpg"
+
         file = discord.File(image_path, filename="album_art.jpg")
 
         embed = discord.Embed(

@@ -40,6 +40,7 @@ class AlbumArtFetcher:
         if search_div:
             img_tag = search_div.find("img") 
             if img_tag and "src" in img_tag.attrs:
+                print(img_tag["src"])
                 return img_tag["src"]
         return None
 
@@ -59,8 +60,9 @@ class AlbumArtFetcher:
 
 
         image_url = self._fetch_image_url(query)
+        print(f"image url: {image_url}")
         if image_url:
             self._download_image(image_url, cache_path)
             return cache_path
-
+        print("No image.")
         return None 
