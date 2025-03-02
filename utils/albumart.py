@@ -35,7 +35,8 @@ class AlbumArtFetcher:
         return os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path)) < self.CACHE_EXPIRY
 
     def _fetch_image_url_google(self, query):
-        url = f"https://www.google.com/search?client=firefox-b-1-d&q={query.replace(" ", "+")}+album&udm=2"
+        encoded_query = query.replace(" ", "+")
+        url = f"https://www.google.com/search?client=firefox-b-1-d&q={encoded_query}+album&udm=2"
         headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
