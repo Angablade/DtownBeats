@@ -38,23 +38,29 @@ async def get_spotify_audio(url):
 
 async def get_spotify_tracks_from_playlist(url):
     headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Host': 'open.spotify.com',
-    'Upgrade-Insecure-Requests': '1',
-    'Cache-Control': 'max-age=0',
-    'Sec-Fetch-Mode': 'navigate'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Host': 'open.spotify.com',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Mode': 'navigate'
     }
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Error fetching playlist: {e}")
+        return []
+
     tracks = []
     cont = response.text.split('"')
     for itm in cont:
         if "/track/" in itm:
             tracks.append(itm)
-    return itm  
+    return list(set(tracks))
+
 
 async def get_spotify_title(url):
     pattern = re.compile(r"https://open\.spotify\.com/track/[a-zA-Z0-9]+(?:\?si=[a-zA-Z0-9]+)?")
