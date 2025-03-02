@@ -19,6 +19,7 @@ import resource
 from utils.voice_utils import start_listening, stop_listening
 from utils.youtube_pl import grab_youtube_pl
 from utils.lyrics import Lyrics
+from utils.albumart import AlbumArtFetcher
 
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
@@ -99,6 +100,7 @@ intents.voice_states = True
 intents.guild_messages = True
 
 start_time = time.time()
+fetcher = AlbumArtFetcher()
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 
 bot.intentional_disconnections = {}
@@ -233,36 +235,67 @@ def is_banned_title(title):
     title = title.lower().strip()
     return any(keyword in title for keyword in banned_keywords)
 
-async def messagesender(bot, channel_id, content=None, embed=None, command_message=None):
+async def messagesender(bot, channel_id, content=None, embed=None, command_message=None, file=None):
     channel = bot.get_channel(channel_id)
     if not channel:
+        print(f"[Error] Channel with ID {channel_id} not found.")
         return
     
     messages = []
-    async with channel.typing():
-        if embed and content:
-            messages.append(await channel.send(content=content, embed=embed))
-        elif embed:
-            messages.append(await channel.send(embed=embed))
-        elif content:
-            while content:
-                if len(content) <= 2000:
-                    chunk = content
-                    content = ""
-                else:
-                    split_index = content.rfind(" ", 0, 2000)
-                    if split_index == -1:
-                        chunk = content[:2000]
-                        content = content[2000:]
-                    else:
-                        chunk = content[:split_index]
-                        content = content[split_index + 1:]
-                messages.append(await channel.send(chunk))
-        else:
-            raise ValueError("Either 'content' or 'embed' must be provided")
     
+    # Ensure file is a discord.File instance if provided
+    if file and isinstance(file, str):
+        try:
+            file = discord.File(file)
+        except Exception as e:
+            print(f"[Error] Failed to create discord.File: {e}")
+            return
+
+    async with channel.typing():
+        try:
+            # All possible combinations of content, embed, and file
+            if content and embed and file:
+                messages.append(await channel.send(content=content, embed=embed, file=file))
+            elif content and embed:
+                messages.append(await channel.send(content=content, embed=embed))
+            elif content and file:
+                messages.append(await channel.send(content=content, file=file))
+            elif embed and file:
+                messages.append(await channel.send(embed=embed, file=file))
+            elif content:
+                # Ensure content is a string before attempting to split
+                if not isinstance(content, str):
+                    print("[Error] Content must be a string.")
+                    return
+
+                while content:
+                    if len(content) <= 2000:
+                        chunk = content
+                        content = ""
+                    else:
+                        split_index = content.rfind(" ", 0, 2000)
+                        if split_index == -1:
+                            chunk = content[:2000]
+                            content = content[2000:]
+                        else:
+                            chunk = content[:split_index]
+                            content = content[split_index + 1:]
+                    messages.append(await channel.send(chunk))
+            elif embed:
+                messages.append(await channel.send(embed=embed))
+            elif file:
+                messages.append(await channel.send(file=file))
+            else:
+                print("[Error] Either 'content', 'embed', or 'file' must be provided.")
+                return
+        except discord.HTTPException as e:
+            print(f"[Error] Failed to send message: {e}")
+            return
+
+    # Store messages if command_message is provided
     if command_message:
         message_map[command_message.id] = messages
+
 
 
 def add_track_to_history(guild_id, video_id, video_title):
@@ -376,20 +409,22 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         artist = track_info.get("artist", "Unknown Artist")
         title = track_info.get("title", video_title)
         duration = int(track_info.get("duration", 0)) // 1000
-        album_art = track_info.get("album_art", "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg")
     else:
-        artist, title, duration, album_art = "Unknown Artist", video_title, 0, "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg"
+        artist, title, duration = "Unknown Artist", video_title, 0
+    
+    image_path = fetcher.get_album_art(video_title)
+    file = discord.File(image_path, filename="album_art.jpg")
 
     embed = discord.Embed(
         title="Now Playing",
         description=f"**{title}**",
         color=discord.Color.blue()
     )
-    embed.set_thumbnail(url=album_art)
+    embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
     embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
     
-    await messagesender(bot, ctx.channel.id, embed=embed)
+    await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
     current_tracks[guild_id]["current_track"] = [video_id, video_title]
 
@@ -825,26 +860,27 @@ async def nowplaying(ctx):
 
         video_title = current_track[1]
         search_results = search_musicbrainz(video_title)
-        
         if search_results:
-            track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0]) 
+            track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0])
             artist = track_info.get("artist", "Unknown Artist")
             title = track_info.get("title", video_title)
-            duration = int(track_info.get("duration", 0)) // 1000 
-            album_art = track_info.get("album_art", "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg") 
+            duration = int(track_info.get("duration", 0)) // 1000
         else:
-            artist, title, duration, album_art = "Unknown Artist", video_title, 0, "https://i.pinimg.com/736x/d8/3a/41/d83a41c46f56cb7b10c670b81d4fe423.jpg"
+            artist, title, duration = "Unknown Artist", video_title, 0
+    
+        image_path = fetcher.get_album_art(video_title)
+        file = discord.File(image_path, filename="album_art.jpg")
 
         embed = discord.Embed(
             title="Now Playing",
             description=f"**{title}**",
             color=discord.Color.blue()
         )
-        embed.set_thumbnail(url=album_art)
+        embed.set_thumbnail(url="attachment://album_art.jpg")
         embed.add_field(name="Artist", value=artist, inline=True)
         embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
-        
-        await messagesender(bot, ctx.channel.id, embed=embed)
+    
+        await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):
