@@ -18,6 +18,7 @@ class SpotifyAudioConverter:
 
     async def convert_to_youtube(self):
         try:
+            print(f"Running SpotDL for: {self.url}")
             process = await asyncio.create_subprocess_exec(
                 "spotdl", self.url,
                 stdout=asyncio.subprocess.PIPE,
@@ -25,12 +26,18 @@ class SpotifyAudioConverter:
             )
             stdout, stderr = await process.communicate()
             output = stdout.decode().strip()
+            error_output = stderr.decode().strip()
+
+            print(f"SpotDL Output:\n{output}")
+            print(f"SpotDL Errors:\n{error_output}")
+
             if "youtube.com/watch?v=" in output:
                 return output.split("youtube.com/watch?v=")[-1].split()[0]
             return None
         except Exception as e:
             print(f"Error converting Spotify link: {e}")
             return None
+
 
 async def get_spotify_audio(url):
     converter = SpotifyAudioConverter(url)
