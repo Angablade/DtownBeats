@@ -1413,7 +1413,7 @@ async def spotify(ctx, url: str):
         track_urls = [url]  # Default to a single track
 
         if "playlist" in url:
-            await messagesender(bot, ctx.channel.id, f"Processing Spotify playlist: {url}")
+            await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: {url}")
             try:
                 track_urls = await get_spotify_tracks_from_playlist(url)
                 if not track_urls:
@@ -1423,23 +1423,37 @@ async def spotify(ctx, url: str):
                 await messagesender(bot, ctx.channel.id, f"Error processing playlist: {e}")
                 return
 
-        for track_url in track_urls:
-            try:
-                await messagesender(bot, ctx.channel.id, f"Processing Spotify track: {track_url}")
-                youtube_link = await get_spotify_audio(track_url)
+        queue_count = 0
+        current_ids = set()
+        total_tracks = len(track_urls)
+        bar_length = 20
+        progress_message = await ctx.send("🔄 Processing Spotify playlist...")
 
+        async def update_progress(current, total):
+            progress = current / total
+            filled_length = int(bar_length * progress)
+            bar = "█" * filled_length + "░" * (bar_length - filled_length)
+            await progress_message.edit(content=f"🔄 Processing Spotify playlist...\n[{bar}] {current}/{total}")
+
+        for index, track_url in enumerate(track_urls, start=1):
+            try:
+                youtube_link = await get_spotify_audio(track_url)
                 if youtube_link:
                     file_path = await get_audio_filename(youtube_link)
                     if file_path:
                         spotify_title = await get_spotify_title(track_url)
-                        await queue_and_play_next(ctx, ctx.guild.id, file_path, spotify_title)
-                    else:
-                        await messagesender(bot, ctx.channel.id, f"Failed to download Spotify track: {track_url}")
-                else:
-                    await messagesender(bot, ctx.channel.id, f"Failed to process Spotify track: {track_url}")
-
+                        if file_path not in current_ids:
+                            current_ids.add(file_path)
+                            await server_queues[guild_id].put([file_path, spotify_title])
+                            queue_count += 1
+                await update_progress(index, total_tracks)
             except Exception as e:
-                await messagesender(bot, ctx.channel.id, f"Error processing track {track_url}: {e}")
+                print(f"Error processing track {track_url}: {e}")
+
+        await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks from the Spotify playlist to the queue.")
+
+        if not ctx.voice_client.is_playing():
+            await play_next(ctx, ctx.voice_client)
 
 
 @bot.command(name="applemusic", aliases=["ap"])
