@@ -15,6 +15,7 @@ import subprocess
 import time
 import platform
 import resource
+import logging
 
 from utils.voice_utils import start_listening, stop_listening
 from utils.youtube_pl import grab_youtube_pl
@@ -48,6 +49,7 @@ TIMEOUT_TIME = int(os.getenv("TIMEOUT_TIME", "60"))
 
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
+logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 CONFIG_FILE = "config/server_config.json"
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
@@ -1410,7 +1412,7 @@ async def spotify(ctx, url: str):
 
         await handle_voice_connection(ctx)
 
-        track_urls = [url]  # Default: Single track
+        track_urls = [url]
 
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
@@ -1438,10 +1440,15 @@ async def spotify(ctx, url: str):
             await progress_message.edit(content=f"🔄 Processing Spotify playlist...\n[{bar}] {current}/{total_tracks}")
 
         async def get_audio_filename(youtube_link):
+            """Downloads audio and returns the file path, logging debug info to a file."""
             try:
+                if not os.path.exists(MUSIC_DIR):
+                    os.makedirs(MUSIC_DIR)
 
-                output_template = os.path.join("/app/music", "%(title)s.%(ext)s")
-                print(f"Downloading audio from: https://www.youtube.com/watch?v={youtube_link}")
+                output_template = os.path.join(MUSIC_DIR, "%(title)s.%(ext)s")
+                log_message = f"🎵 Downloading audio from: https://www.youtube.com/watch?v={youtube_link}"
+                print(log_message)
+                logging.debug(log_message)
 
                 process = await asyncio.create_subprocess_exec(
                     "yt-dlp", "-f", "bestaudio", "-o", output_template,
@@ -1451,21 +1458,24 @@ async def spotify(ctx, url: str):
                 )
                 stdout, stderr = await process.communicate()
 
-                print(f"yt-dlp Output:\n{stdout.decode().strip()}")
-                print(f"yt-dlp Errors:\n{stderr.decode().strip()}")
+                logging.debug(f"✅ yt-dlp Output:\n{stdout.decode().strip()}")
+                logging.debug(f"⚠️ yt-dlp Errors:\n{stderr.decode().strip()}")
 
                 if process.returncode != 0:
-                    print("Failed to download the track.")
+                    logging.error("❌ Failed to download the track.")
                     return None
 
-                # Get the actual filename from yt-dlp output
+                # Extract the filename from yt-dlp output
                 for line in stdout.decode().split("\n"):
-                    if line.strip().endswith(".webm") or line.strip().endswith(".m4a") or line.strip().endswith(".mp3"):
-                        return os.path.join("/app/music", line.strip())
+                    if line.strip().endswith((".webm", ".m4a", ".mp3")):
+                        file_path = os.path.join(MUSIC_DIR, line.strip())
+                        logging.debug(f"✅ Track saved as: {file_path}")
+                        return file_path
 
+                logging.error("❌ yt-dlp completed but did not return a valid file.")
                 return None
             except Exception as e:
-                print(f"❌ Error downloading YouTube audio: {e}")
+                logging.error(f"❌ Error downloading YouTube audio: {e}")
                 return None
 
         async def process_track(track_url):

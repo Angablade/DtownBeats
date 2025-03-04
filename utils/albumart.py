@@ -14,7 +14,7 @@ class AlbumArtFetcher:
     CACHE_DIR = "/app/albumart"
     CACHE_EXPIRY = 14 * 24 * 60 * 60
     HEADERS = {"User-Agent": "Mozilla/5.0"}
-    LOG_FILE = os.path.join(CACHE_DIR, "log.txt")
+    LOG_FILE = "/app/music/debug.log"
     DEFAULT_IMAGE_PATH = os.path.join(CACHE_DIR, "default.jpg")
     DEFAULT_IMAGE_BASE64 = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDACgcHiMeGSgjISMtKygwPGRBPDc3PHtYXUlkkYCZlo+AjIqgtObDoKrarYqMyP/L2u71////m8H////6/+b9//j/2wBDASstLTw1PHZBQXb4pYyl+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+Pj/yQARCABAAEADAREAAhEBAxEB/8wACgAQEAUBEBEF/9oADAMBAAIRAxEAPwDSLIy8AHFzVcyDsbHUSvxfsUN8HqZXWk1U/Vk2qhJ/kW0Wiyx4kCMpaQjyXe+wBeYCUeo0dfWhH0XTK0kJzTF6KmHcd4t68h8kCpnC6+7aRFHc4kod5qE6X2aEhb0DoejKYarN3Q2Y3Ve4LnGjf+enkboVHmN0QHbuR0fVXIWyY/ibBlCW+ZZqIQIBqtGW/a00EmF4nHHxpMftRgm91A12+Hj7wlUgg3Ly7BmDxN9uFIzkxo0sVgigUe6hMnpm/wCOdCmKaeHX/L9GIEFbx56sNZVvveuUjN2kACrbfgYHYojx6yMRCuuvTir8FlwlCvZShwDuL4gP/9k="
 
