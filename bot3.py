@@ -47,11 +47,13 @@ QUEUE_PAGE_SIZE = int(os.getenv("QUEUE_PAGE_SIZE","10"))
 HISTORY_PAGE_SIZE = int(os.getenv("HISTORY_PAGE_SIZE","10"))
 TIMEOUT_TIME = int(os.getenv("TIMEOUT_TIME", "60"))
 
+LOG_FILE = "/app/config/debug.log"
+CONFIG_FILE = "config/server_config.json"
+
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
-CONFIG_FILE = "config/server_config.json"
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
 if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "w") as f:
