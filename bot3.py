@@ -1366,7 +1366,7 @@ async def bandcamp(ctx, url: str):
 
         await handle_voice_connection(ctx)
     
-        await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: {url}")
+        await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: <{url}>")
         file_path = await get_bandcamp_audio(url)
         if file_path:
             trackdata = await get_bandcamp_title(url)
@@ -1388,7 +1388,7 @@ async def soundcloud(ctx, url: str):
 
         await handle_voice_connection(ctx)
     
-        await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: {url}")
+        await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: <{url}>")
         file_path = await get_soundcloud_audio(url)
         soundcloud_title = await get_soundcloud_title(url)
         if file_path:
@@ -1413,7 +1413,7 @@ async def spotify(ctx, url: str):
         track_urls = [url]  # Default to a single track
 
         if "playlist" in url:
-            await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: {url}")
+            await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
             try:
                 track_urls = await get_spotify_tracks_from_playlist(url)
                 if not track_urls:
@@ -1470,7 +1470,7 @@ async def applemusic(ctx, url: str):
 
         await handle_voice_connection(ctx)
     
-        await messagesender(bot, ctx.channel.id, f"Processing Apple Music link: {url}")
+        await messagesender(bot, ctx.channel.id, f"Processing Apple Music link: <{url}>")
         youtube_link = await get_apple_music_audio(url)
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
