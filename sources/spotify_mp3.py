@@ -20,7 +20,7 @@ class SpotifyAudioConverter:
         try:
             print(f"Running SpotDL for: {self.url}")
             process = await asyncio.create_subprocess_exec(
-                "spotdl", self.url,
+                "spotdl", f"{self.url} --redownload --overwrite",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
