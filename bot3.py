@@ -1444,10 +1444,7 @@ async def spotify(ctx, url: str):
         async def get_audio_filename(youtube_link):
             """Downloads audio and returns the file path, logging debug info to a file."""
             try:
-                if not os.path.exists(MUSIC_DIR):
-                    os.makedirs(MUSIC_DIR)
-
-                output_template = os.path.join(MUSIC_DIR, "%(title)s.%(ext)s")
+                output_template = os.path.join("/app/music", "%(title)s.%(ext)s")
                 log_message = f"🎵 Downloading audio from: https://www.youtube.com/watch?v={youtube_link}"
                 print(log_message)
                 logging.debug(log_message)
@@ -1470,7 +1467,7 @@ async def spotify(ctx, url: str):
                 # Extract the filename from yt-dlp output
                 for line in stdout.decode().split("\n"):
                     if line.strip().endswith((".webm", ".m4a", ".mp3")):
-                        file_path = os.path.join(MUSIC_DIR, line.strip())
+                        file_path = os.path.join("/app/music", line.strip())
                         logging.debug(f"✅ Track saved as: {file_path}")
                         return file_path
 
