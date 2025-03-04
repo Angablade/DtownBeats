@@ -1410,20 +1410,24 @@ async def spotify(ctx, url: str):
 
         await handle_voice_connection(ctx)
 
-        track_urls = [url]
+        track_urls = [url]  # Default: Single track
 
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
             try:
                 track_urls = await get_spotify_tracks_from_playlist(url)
                 if not track_urls:
-                    await messagesender(bot, ctx.channel.id, "Failed to retrieve tracks from Spotify playlist.")
+                    await messagesender(bot, ctx.channel.id, "❌ Failed to retrieve tracks from Spotify playlist.")
                     return
             except Exception as e:
-                await messagesender(bot, ctx.channel.id, f"Error processing playlist: {e}")
+                await messagesender(bot, ctx.channel.id, f"⚠️ Error processing playlist: {e}")
                 return
 
         total_tracks = len(track_urls)
+        if total_tracks == 0:
+            await messagesender(bot, ctx.channel.id, "❌ No tracks found in the playlist.")
+            return
+
         bar_length = 20
         progress_message = await ctx.send(f"🔄 Processing {total_tracks} tracks from the playlist...")
 
@@ -1435,17 +1439,25 @@ async def spotify(ctx, url: str):
 
         async def process_track(track_url):
             try:
+                print(f"🔍 Converting track: {track_url}")  # Debugging Step 1
+
                 youtube_link = await get_spotify_audio(track_url)
-                if youtube_link:
-                    file_path = await get_audio_filename(youtube_link)
-                    if file_path:
-                        spotify_title = await get_spotify_title(track_url)
-                        return file_path, spotify_title
-                return None
+                if not youtube_link:
+                    print(f"❌ Failed to convert {track_url} to YouTube.")
+                    return None
+
+                file_path = await get_audio_filename(youtube_link)
+                if not file_path:
+                    print(f"❌ Failed to download track from {youtube_link}.")
+                    return None
+
+                spotify_title = await get_spotify_title(track_url)
+                return file_path, spotify_title
             except Exception as e:
-                print(f"Error processing track {track_url}: {e}")
+                print(f"⚠️ Error processing track {track_url}: {e}")
                 return None
 
+        # **Run all track conversions in parallel**
         tasks = [process_track(url) for url in track_urls]
         results = await asyncio.gather(*tasks)
 
@@ -1457,10 +1469,14 @@ async def spotify(ctx, url: str):
                 await server_queues[guild_id].put([file_path, spotify_title])
                 queue_count += 1
 
-        await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks to the queue.")
+        if queue_count == 0:
+            await progress_message.edit(content="❌ No tracks were added to the queue.")
+        else:
+            await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks to the queue.")
 
         if not ctx.voice_client.is_playing():
             await play_next(ctx, ctx.voice_client)
+
 
 @bot.command(name="applemusic", aliases=["ap"])
 async def applemusic(ctx, url: str):
