@@ -24,7 +24,7 @@ from utils.albumart import AlbumArtFetcher
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
 from sources.soundcloud_mp3 import get_soundcloud_audio, get_soundcloud_title
-from sources.spotify_mp3 import get_spotify_audio, get_spotify_title, get_spotify_tracks_from_playlist
+from sources.spotify_mp3 import get_spotify_audio, get_spotify_tracks_from_playlist, get_spotify_title
 from sources.apple_music_mp3 import get_apple_music_audio
 
 from concurrent.futures import ThreadPoolExecutor
@@ -1410,7 +1410,7 @@ async def spotify(ctx, url: str):
 
         await handle_voice_connection(ctx)
 
-        track_urls = [url]  # Default to a single track
+        track_urls = [url]
 
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
@@ -1423,38 +1423,44 @@ async def spotify(ctx, url: str):
                 await messagesender(bot, ctx.channel.id, f"Error processing playlist: {e}")
                 return
 
-        queue_count = 0
-        current_ids = set()
         total_tracks = len(track_urls)
         bar_length = 20
-        progress_message = await ctx.send("🔄 Processing Spotify playlist...")
+        progress_message = await ctx.send(f"🔄 Processing {total_tracks} tracks from the playlist...")
 
-        async def update_progress(current, total):
-            progress = current / total
+        async def update_progress(current):
+            progress = current / total_tracks
             filled_length = int(bar_length * progress)
             bar = "█" * filled_length + "░" * (bar_length - filled_length)
-            await progress_message.edit(content=f"🔄 Processing Spotify playlist...\n[{bar}] {current}/{total}")
+            await progress_message.edit(content=f"🔄 Processing Spotify playlist...\n[{bar}] {current}/{total_tracks}")
 
-        for index, track_url in enumerate(track_urls, start=1):
+        async def process_track(track_url):
             try:
                 youtube_link = await get_spotify_audio(track_url)
                 if youtube_link:
                     file_path = await get_audio_filename(youtube_link)
                     if file_path:
                         spotify_title = await get_spotify_title(track_url)
-                        if file_path not in current_ids:
-                            current_ids.add(file_path)
-                            await server_queues[guild_id].put([file_path, spotify_title])
-                            queue_count += 1
-                await update_progress(index, total_tracks)
+                        return file_path, spotify_title
+                return None
             except Exception as e:
                 print(f"Error processing track {track_url}: {e}")
+                return None
 
-        await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks from the Spotify playlist to the queue.")
+        tasks = [process_track(url) for url in track_urls]
+        results = await asyncio.gather(*tasks)
+
+        queue_count = 0
+        for idx, result in enumerate(results, start=1):
+            await update_progress(idx)
+            if result:
+                file_path, spotify_title = result
+                await server_queues[guild_id].put([file_path, spotify_title])
+                queue_count += 1
+
+        await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks to the queue.")
 
         if not ctx.voice_client.is_playing():
             await play_next(ctx, ctx.voice_client)
-
 
 @bot.command(name="applemusic", aliases=["ap"])
 async def applemusic(ctx, url: str):
