@@ -1495,7 +1495,7 @@ async def spotify(ctx, url: str):
         
         queue_count = 0
         for idx, result in enumerate(results, start=1):
-             await update_progress(idx)
+            await update_progress(idx)
             if result:
                 file_path, spotify_title = result
                 await server_queues[guild_id].put([file_path, spotify_title])
