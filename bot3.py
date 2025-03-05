@@ -1454,7 +1454,7 @@ async def spotify(ctx, url: str):
                     await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
                     return None
 
-                file_path = await download_audio("https://music.youtube.com/watch?v=" + youtube_link)
+                file_path = await download_audio(youtube_link)
                 if not file_path:
                     print(f"❌ Failed to download track from https://music.youtube.com/watch?v={youtube_link}.")
                     await debugger_message.edit(content=f"❌ Failed to download track from {youtube_link}.")
@@ -1468,7 +1468,7 @@ async def spotify(ctx, url: str):
                 return None
         
         async def download_audio(youtube_link):
-            output_path = f"music/{self.video_id}.mp3"
+            output_path = f"music/{youtube_link}.mp3"
             ydl_opts = {
                 'format': 'bestaudio[acodec^=opus]/bestaudio',
                 'postprocessors': [{
@@ -1489,7 +1489,7 @@ async def spotify(ctx, url: str):
         
         def _download_sync(ydl_opts, url):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.extract_info(url, download=True)
+                ydl.extract_info("https://music.youtube.com/watch?v=" + url, download=True)
         
         tasks = [process_track(url) for url in track_urls]
         results = await asyncio.gather(*tasks)
