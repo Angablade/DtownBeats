@@ -8,64 +8,69 @@ from bs4 import BeautifulSoup
 from spotdl import Spotdl
 
 class SpotifyAudioConverter:
-    def __init__(self, url):
+    """
+    Converts Spotify tracks to YouTube links using SpotDL.
+    """
+    SPOTIFY_TRACK_REGEX = r'https?://open\.spotify\.com/track/[\w]+'
+    CACHE_PATH = os.path.expanduser("~/.spotdl-cache")
+
+    def __init__(self, url: str):
         if not self.validate_url(url):
             raise ValueError("Invalid Spotify URL")
         self.url = url
 
     @staticmethod
     def validate_url(url: str) -> bool:
-        return re.match(r'https?://open\.spotify\.com/track/[\w]+', url) is not None
+        """Validates if the given URL is a Spotify track."""
+        return re.match(SpotifyAudioConverter.SPOTIFY_TRACK_REGEX, url) is not None
 
-async def convert_to_youtube(self):
-    """Converts a Spotify track to a YouTube link using SpotDL."""
+    @staticmethod
+    def clear_cache():
+        """Clears SpotDL cache to avoid download conflicts."""
+        try:
+            if os.path.exists(SpotifyAudioConverter.CACHE_PATH):
+                shutil.rmtree(SpotifyAudioConverter.CACHE_PATH, ignore_errors=True)
+                print("✅ Cleared SpotDL cache.")
+            else:
+                print("ℹ️ No SpotDL cache found to clear.")
+        except Exception as e:
+            print(f"⚠️ Error removing SpotDL cache: {e}")
 
-    # ✅ Clear SpotDL cache (fix potential cache issues)
-    try:
-        cache_path = os.path.expanduser("~/.spotdl-cache")
-        if os.path.exists(cache_path):
-            shutil.rmtree(cache_path, ignore_errors=True)
-            print("✅ Cleared SpotDL cache.")
-        else:
-            print("ℹ️ No SpotDL cache found to clear.")
-    except Exception as x:
-        print(f"⚠️ Error removing SpotDL cache: {x}")
+    async def convert_to_youtube(self) -> str | None:
+        """Converts a Spotify track to a YouTube link using SpotDL."""
+        self.clear_cache()
 
-    try:
-        print(f"🎵 Running SpotDL for: {self.url}")
+        try:
+            print(f"🎵 Running SpotDL for: {self.url}")
 
-        # ✅ Ensure the command arguments are properly formatted
-        process = await asyncio.create_subprocess_exec(
-            "spotdl", self.url, "--force", "--overwrite", "force",
-            stdout=asyncio.subprocess.PIPE, 
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
+            process = await asyncio.create_subprocess_exec(
+                "spotdl", self.url, "--force", "--overwrite", "force",
+                stdout=asyncio.subprocess.PIPE, 
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
 
-        output = stdout.decode().strip()
-        error_output = stderr.decode().strip()
+            output = stdout.decode().strip()
+            error_output = stderr.decode().strip()
 
-        # ✅ **Better Debugging Output**
-        print(f"✅ SpotDL Output:\n{output}")
-        print(f"⚠️ SpotDL Errors:\n{error_output}")
+            print(f"✅ SpotDL Output:\n{output}")
+            print(f"⚠️ SpotDL Errors:\n{error_output}")
 
-        # ✅ **Ensure SpotDL actually provides a YouTube link**
-        if "youtube.com/watch?v=" in output:
-            youtube_link = output.split("youtube.com/watch?v=")[-1].split()[0]
-            print(f"🎥 Extracted YouTube Link: {youtube_link}")
-            return youtube_link
-        
-        print("❌ SpotDL did not return a valid YouTube link.")
-        return None
+            if "youtube.com/watch?v=" in output:
+                youtube_link = output.split("youtube.com/watch?v=")[-1].split()[0]
+                print(f"🎥 Extracted YouTube Link: {youtube_link}")
+                return youtube_link
 
-    except Exception as e:
-        print(f"❌ Error converting Spotify link: {e}")
-        return None
+            print("❌ SpotDL did not return a valid YouTube link.")
+            return None
+        except Exception as e:
+            print(f"❌ Error converting Spotify link: {e}")
+            return None
 
-
-async def get_spotify_audio(url):
+async def get_spotify_audio(url: str) -> str | None:
+    """Helper function to convert a Spotify URL to a YouTube link."""
     converter = SpotifyAudioConverter(url)
-    return await converter.convert_to_youtube()
+    return await converter.convert_to_youtube(
 
 async def get_spotify_tracks_from_playlist(url):
     headers = {

@@ -1404,18 +1404,18 @@ async def soundcloud(ctx, url: str):
 async def spotify(ctx, url: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
-
+        
         if not await check_perms(ctx, guild_id):
             return
-
-        if not server_queues.get(guild_id):
+        
+        if guild_id not in server_queues:
             server_queues[guild_id] = asyncio.Queue()
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
-
+        
         await handle_voice_connection(ctx)
-
+        
         track_urls = [url]
-
+        
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
             try:
@@ -1432,61 +1432,24 @@ async def spotify(ctx, url: str):
             await messagesender(bot, ctx.channel.id, "❌ No tracks found in the playlist.")
             return
 
-        bar_length = 20
         progress_message = await ctx.send(f"🔄 Processing {total_tracks} tracks from the playlist...")
-
+        
         async def update_progress(current):
+            bar_length = 20
             progress = current / total_tracks
             filled_length = int(bar_length * progress)
             bar = "█" * filled_length + "░" * (bar_length - filled_length)
             await progress_message.edit(content=f"🔄 Processing Spotify playlist...\n[{bar}] {current}/{total_tracks}")
 
-        async def get_audio_filename(youtube_link):
-            """Downloads audio and returns the file path, logging debug info to a file."""
-            try:
-                output_template = os.path.join("/app/music", "%(title)s.%(ext)s")
-                log_message = f"🎵 Downloading audio from: https://www.youtube.com/watch?v={youtube_link}"
-                print(log_message)
-                logging.debug(log_message)
-
-                process = await asyncio.create_subprocess_exec(
-                    "yt-dlp", "-f", "bestaudio", "-o", output_template,
-                    f"https://www.youtube.com/watch?v={youtube_link}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await process.communicate()
-
-                logging.debug(f"✅ yt-dlp Output:\n{stdout.decode().strip()}")
-                logging.debug(f"⚠️ yt-dlp Errors:\n{stderr.decode().strip()}")
-
-                if process.returncode != 0:
-                    logging.error("❌ Failed to download the track.")
-                    return None
-
-                # Extract the filename from yt-dlp output
-                for line in stdout.decode().split("\n"):
-                    if line.strip().endswith((".webm", ".m4a", ".mp3")):
-                        file_path = os.path.join("/app/music", line.strip())
-                        logging.debug(f"✅ Track saved as: {file_path}")
-                        return file_path
-
-                logging.error("❌ yt-dlp completed but did not return a valid file.")
-                return None
-            except Exception as e:
-                logging.error(f"❌ Error downloading YouTube audio: {e}")
-                return None
-
         async def process_track(track_url):
             try:
                 print(f"🔍 Converting track: {track_url}")
-
                 youtube_link = await get_spotify_audio(track_url)
                 if not youtube_link:
                     print(f"❌ Failed to convert {track_url} to YouTube.")
                     return None
 
-                file_path = await get_audio_filename(youtube_link)
+                file_path = await download_audio(youtube_link)
                 if not file_path:
                     print(f"❌ Failed to download track from {youtube_link}.")
                     return None
@@ -1496,11 +1459,36 @@ async def spotify(ctx, url: str):
             except Exception as e:
                 print(f"⚠️ Error processing track {track_url}: {e}")
                 return None
-
-        # **Run all track conversions in parallel**
+        
+        async def download_audio(youtube_link):
+            try:
+                output_template = "/app/music/%(title)s.%(ext)s"
+                process = await asyncio.create_subprocess_exec(
+                    "yt-dlp", "-f", "bestaudio", "-o", output_template,
+                    f"https://www.youtube.com/watch?v={youtube_link}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode != 0:
+                    print(f"❌ yt-dlp Error:\n{stderr.decode().strip()}")
+                    return None
+                
+                output_lines = stdout.decode().split("\n")
+                for line in output_lines:
+                    if line.strip().endswith((".webm", ".m4a", ".mp3")):
+                        return f"/app/music/{line.strip()}"
+                
+                print("❌ yt-dlp completed but no valid file found.")
+                return None
+            except Exception as e:
+                print(f"❌ Error downloading YouTube audio: {e}")
+                return None
+        
         tasks = [process_track(url) for url in track_urls]
         results = await asyncio.gather(*tasks)
-
+        
         queue_count = 0
         for idx, result in enumerate(results, start=1):
             await update_progress(idx)
@@ -1513,10 +1501,9 @@ async def spotify(ctx, url: str):
             await progress_message.edit(content="❌ No tracks were added to the queue.")
         else:
             await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks to the queue.")
-
+        
         if not ctx.voice_client.is_playing():
             await play_next(ctx, ctx.voice_client)
-
 
 @bot.command(name="applemusic", aliases=["ap"])
 async def applemusic(ctx, url: str):
