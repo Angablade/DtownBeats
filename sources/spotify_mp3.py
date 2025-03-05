@@ -34,7 +34,7 @@ async def spotify_to_youtube(url: str):
         headers_with_host = headers.copy()
         headers_with_host.update({"Host": "music.youtube.com"})
 
-        response = requests.get(search_url, headers=headers_with_host))
+        response = requests.get(search_url, headers=headers_with_host)
         response.raise_for_status()
         video_ids = re.findall(r'watch\?v=([\w-]+)', response.text)
         return video_ids[0] if video_ids else None
