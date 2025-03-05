@@ -1454,9 +1454,9 @@ async def spotify(ctx, url: str):
                     await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
                     return None
 
-                file_path = await download_audio(youtube_link)
+                file_path = await download_audio("https://music.youtube.com/watch?v=" + youtube_link)
                 if not file_path:
-                    print(f"❌ Failed to download track from {youtube_link}.")
+                    print(f"❌ Failed to download track from https://music.youtube.com/watch?v={youtube_link}.")
                     await debugger_message.edit(content=f"❌ Failed to download track from {youtube_link}.")
                     return None
 
