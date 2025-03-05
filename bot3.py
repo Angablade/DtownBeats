@@ -1488,8 +1488,8 @@ async def spotify(ctx, url: str):
                 return False
         
         def _download_sync(self, ydl_opts, url):
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info(url, download=True)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info(url, download=True)
         
         tasks = [process_track(url) for url in track_urls]
         results = await asyncio.gather(*tasks)
