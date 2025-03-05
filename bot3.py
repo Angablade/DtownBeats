@@ -1482,7 +1482,7 @@ async def spotify(ctx, url: str):
             try:
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, _download_sync, ydl_opts, youtube_link)
-                return os.path.exists(output_path)
+                return output_path
             except Exception as e:
                 print(f"Error downloading {codec} format from {youtube_link}: {e}")
                 return False
@@ -1498,7 +1498,6 @@ async def spotify(ctx, url: str):
         for idx, result in enumerate(results, start=1):
             await update_progress(idx)
             if result:
-                await messagesender(bot, ctx.channel.id, f"{results}")
                 file_path, spotify_title = result
 
                 await messagesender(bot, ctx.channel.id, file_path)
