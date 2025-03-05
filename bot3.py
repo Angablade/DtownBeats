@@ -1492,7 +1492,7 @@ async def spotify(ctx, url: str):
         
         queue_count = 0
         for idx, result in enumerate(results, start=1):
-             await messagesender(bot, ctx.channel.id, "Fuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu")
+            await messagesender(bot, ctx.channel.id, "Fuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu")
             await update_progress(idx)
             if result:
                 file_path, spotify_title = result
