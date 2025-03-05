@@ -2,6 +2,7 @@
 import re
 import requests
 from bs4 import BeautifulSoup
+import json
 
 SPOTIFY_TRACK_REGEX = r'https?://open\.spotify\.com/track/[\w]+'
 
@@ -22,22 +23,22 @@ def validate_url(url: str) -> bool:
 async def spotify_to_youtube(url: str):
     if not validate_url(url):
         raise ValueError("Invalid Spotify URL")
-
     query = await get_spotify_title(url)
     if not query:
         print("❌ Failed to fetch Spotify title.")
         return None
-
     search_url = f"https://music.youtube.com/search?q={query.replace(' ', '+')}"
-    
     try:
         headers_with_host = headers.copy()
         headers_with_host.update({"Host": "music.youtube.com"})
-
         response = requests.get(search_url, headers=headers_with_host)
         response.raise_for_status()
-        video_ids = re.findall(r'watch\?v=([\w-]+)', response.text)
-        return video_ids[0] if video_ids else None
+        contents = response.text.split(",")
+        for item in contents:
+            if "videoId" in item:
+                print(item)
+                videoid = item.split(":")[-1][4:][:-4]
+                return videoid
     except requests.RequestException as e:
         print(f"❌ Error fetching YouTube search results: {e}")
         return None
@@ -57,17 +58,25 @@ async def get_spotify_tracks_from_playlist(url):
 async def get_spotify_title(url):
     """Fetches the title and artist from a Spotify track URL."""
     if not validate_url(url):
-        return None
-    
+        return None 
     try:
         headers_with_host = headers.copy()
         headers_with_host.update({"Host": "open.spotify.com"})
         response = requests.get(url, headers=headers_with_host)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        title = soup.find("meta", {"property": "og:title"})["content"]
-        artist = soup.find("meta", {"property": "music:musician"})["content"]
+        script_tag = soup.find('script', {'id': 'urlSchemeConfig'})
+        if script_tag:
+            json_data = json.loads(script_tag.string)
+            redirect_url = json_data.get('redirectUrl')
+            response = requests.get(redirect_url, headers=headers_with_host)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+        artist_tag = soup.find("meta", {"name": "music:musician_description"})
+        title_tag = soup.find("meta", {"property": "og:title"})
+        artist = artist_tag["content"]
+        title = title_tag["content"]
 
-        return f"{artist} - {title}" if artist and title else None
+        return f"{artist} - {title}"
     except requests.RequestException:
         return None
