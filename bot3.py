@@ -1500,6 +1500,7 @@ async def spotify(ctx, url: str):
             if result:
                 file_path, spotify_title = result
 
+                await messagesender(bot, ctx.channel.id, "ORANGES\nBANANAS")
                 await messagesender(bot, ctx.channel.id, file_path)
                 await messagesender(bot, ctx.channel.id, spotify_title)
 
