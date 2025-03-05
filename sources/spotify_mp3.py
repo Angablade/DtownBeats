@@ -36,7 +36,7 @@ async def convert_to_youtube(self):
 
         # ✅ Ensure the command arguments are properly formatted
         process = await asyncio.create_subprocess_exec(
-            "spotdl", self.url, "--force", "--log-level", "DEBUG",
+            "spotdl", self.url, "--force", "--overwrite", "force",
             stdout=asyncio.subprocess.PIPE, 
             stderr=asyncio.subprocess.PIPE
         )
