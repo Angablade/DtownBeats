@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import shutil
 import subprocess
 import requests
 from bs4 import BeautifulSoup
@@ -15,10 +16,6 @@ class SpotifyAudioConverter:
     @staticmethod
     def validate_url(url: str) -> bool:
         return re.match(r'https?://open\.spotify\.com/track/[\w]+', url) is not None
-
- import os
-import shutil
-import asyncio
 
 async def convert_to_youtube(self):
     """Converts a Spotify link to a YouTube link using SpotDL."""
