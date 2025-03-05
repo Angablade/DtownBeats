@@ -1468,33 +1468,28 @@ async def spotify(ctx, url: str):
                 return None
         
         async def download_audio(youtube_link):
+            output_path = f"music/{self.video_id}.mp3"
+            ydl_opts = {
+                'format': 'bestaudio[acodec^=opus]/bestaudio',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '320',
+                }],
+                'outtmpl': f'music/%(id)s',
+            }
+        
             try:
-                output_template = "/app/music/%(title)s.%(ext)s"
-                process = await asyncio.create_subprocess_exec(
-                    "yt-dlp", "-f", "bestaudio", "-o", output_template,
-                    f"https://music.youtube.com/watch?v={youtube_link}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await process.communicate()
-                
-                if process.returncode != 0:
-                    print(f"❌ yt-dlp Error:\n{stderr.decode().strip()}")
-                    await debugger_message.edit(content=f"❌ yt-dlp Error:\n{stderr.decode().strip()}")
-                    return None
-                
-                output_lines = stdout.decode().split("\n")
-                for line in output_lines:
-                    if line.strip().endswith((".mp3", ".opus")):
-                        return f"/app/music/{line.strip()}"
-
-                print("❌ yt-dlp completed but no valid file found.")
-                await debugger_message.edit(content=f"❌ yt-dlp completed but no valid file found.")
-                return None
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, _download_sync, ydl_opts, youtube_link)
+                return os.path.exists(output_path)
             except Exception as e:
-                print(f"❌ Error downloading YouTube audio: {e}")
-                await debugger_message.edit(content=f"❌ Error downloading YouTube audio: {e}")
-                return None
+                print(f"Error downloading {codec} format from {youtube_link}: {e}")
+                return False
+        
+        def _download_sync(self, ydl_opts, url):
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(url, download=True)
         
         tasks = [process_track(url) for url in track_urls]
         results = await asyncio.gather(*tasks)
