@@ -1455,13 +1455,9 @@ async def spotify(ctx, url: str):
                     return None
 
                 file_path = await download_audio(youtube_link)
-                if not file_path:
-                    print(f"❌ Failed to download track from https://music.youtube.com/watch?v={youtube_link}.")
-                    await debugger_message.edit(content=f"❌ Failed to download track from {youtube_link}.")
-                    return None
-
                 spotify_title = await get_spotify_title(track_url)
-                return file_path, spotify_title
+                return youtube_link, spotify_title
+
             except Exception as e:
                 print(f"⚠️ Error processing track {track_url}: {e}")
                 await debugger_message.edit(content=f"⚠️ Error processing track {track_url}: {e}")
@@ -1499,10 +1495,6 @@ async def spotify(ctx, url: str):
             await update_progress(idx)
             if result:
                 file_path, spotify_title = result
-
-                await messagesender(bot, ctx.channel.id, "ORANGES\nBANANAS")
-                await messagesender(bot, ctx.channel.id, file_path)
-                await messagesender(bot, ctx.channel.id, spotify_title)
 
                 await server_queues[guild_id].put([file_path, spotify_title])
                 queue_count += 1
