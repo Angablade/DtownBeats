@@ -412,7 +412,11 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0])
         artist = track_info.get("artist", "Unknown Artist")
         title = track_info.get("title", video_title)
-        duration = int(track_info.get("duration", 0)) // 1000
+        duration = track_info.get("duration", "0")
+        if duration is None:
+            duration = 0
+        else:
+            duration = int(duration) // 1000
     else:
         artist, title, duration = "Unknown Artist", video_title, 0
     
