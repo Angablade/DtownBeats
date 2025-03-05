@@ -1495,7 +1495,7 @@ async def spotify(ctx, url: str):
             await update_progress(idx)
             if result:
                 file_path, spotify_title = result
-                await messagesender(ctx, guild_id, content=f"{results}")
+                await messagesender(ctx, guild_id, content=f"{file_path} | {spotify_title}")
                 await server_queues[guild_id].put([file_path, spotify_title])
                 queue_count += 1
 
