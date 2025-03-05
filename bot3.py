@@ -1435,7 +1435,7 @@ async def spotify(ctx, url: str):
             await messagesender(bot, ctx.channel.id, "❌ No tracks found")
             return
 
-        progress_message = await ctx.send(f"🔄 Processing {total_tracks} tracks from Spotify")
+        progress_message = await ctx.send(f"🔄 Processing {total_tracks} track(s) from Spotify")
 
         async def update_progress(current):
             bar_length = 20
@@ -1498,7 +1498,12 @@ async def spotify(ctx, url: str):
         for idx, result in enumerate(results, start=1):
             await update_progress(idx)
             if result:
+                await messagesender(bot, ctx.channel.id, f"{results}")
                 file_path, spotify_title = result
+
+                await messagesender(bot, ctx.channel.id, file_path)
+                await messagesender(bot, ctx.channel.id, spotify_title)
+
                 await server_queues[guild_id].put([file_path, spotify_title])
                 queue_count += 1
 
@@ -1507,7 +1512,7 @@ async def spotify(ctx, url: str):
         else:
             await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks to the queue.")
         
-        if not ctx.voice_client.is_playing():
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
             await play_next(ctx, ctx.voice_client)
 
 @bot.command(name="applemusic", aliases=["ap"])
