@@ -25,7 +25,7 @@ from utils.albumart import AlbumArtFetcher
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
 from sources.soundcloud_mp3 import get_soundcloud_audio, get_soundcloud_title
-from sources.spotify_mp3 import get_spotify_audio, get_spotify_tracks_from_playlist, get_spotify_title
+from sources.spotify_mp3 import spotify_to_youtube, get_spotify_tracks_from_playlist, get_spotify_title
 from sources.apple_music_mp3 import get_apple_music_audio
 
 from concurrent.futures import ThreadPoolExecutor
@@ -817,7 +817,7 @@ async def search(ctx, *, query: str):
         if not await check_perms(ctx, guild_id):
             return
     
-        ydl_opts = {"default_search": "ytsearch5", "quiet": True}
+        ydl_opts = {"default_search": "ytsearch10", "quiet": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(query, download=False)
@@ -985,7 +985,7 @@ async def version(ctx):
 async def help_command(ctx):
     async with ctx.typing():
         """Sends a list of commands in a direct message with a table layout."""
-        embed = Embed(title="📜 Bot Commands", description="Here is a list of all available commands:", color=discord.Color.blue())
+        embed = Embed(title="📜 Bot Commands (1/2)", description="Here is a list of all available commands:", color=discord.Color.blue())
 
         # 🎵 Music Commands
         embed.add_field(name="🎵 **Music Commands**", value="""
@@ -1035,7 +1035,8 @@ async def help_command(ctx):
         leave     | go        | Disconnect the bot from voice.
         """, inline=False)
 
-        embed.add_field(name="", value="", inline=False)  # Empty space
+        await messagesender(bot, ctx.author.id, embed=embed)
+        embed = Embed(title="📜 Bot Commands (2/2)", description="Here is a list of all available commands:", color=discord.Color.blue())
 
         # 🎤 Voice Commands
         embed.add_field(name="🎤 **Voice Control Commands**", value="""
@@ -1089,10 +1090,10 @@ async def help_command(ctx):
         dockboot  | dockerrestart| Restart Docker container (owner only).
         """, inline=False)
 
+        await messagesender(bot, ctx.author.id, embed=embed)
+
         username = ctx.message.author.mention
         try:   
-            await messagesender(bot, ctx.author.id, embed=embed)
-            #await ctx.author.send(embed=embed)
             await messagesender(bot, ctx.channel.id, content=f"{username}, I've sent you a DM with the list of commands. 📬")
         except discord.Forbidden:
             await messagesender(bot, ctx.channel.id, content=f"{username}, I couldn't send you a DM. Please check your privacy settings.")
@@ -1444,7 +1445,7 @@ async def spotify(ctx, url: str):
         async def process_track(track_url):
             try:
                 print(f"🔍 Converting track: {track_url}")
-                youtube_link = await get_spotify_audio(track_url)
+                youtube_link = await spotify_to_youtube(track_url)
                 if not youtube_link:
                     print(f"❌ Failed to convert {track_url} to YouTube.")
                     return None
@@ -1465,7 +1466,7 @@ async def spotify(ctx, url: str):
                 output_template = "/app/music/%(title)s.%(ext)s"
                 process = await asyncio.create_subprocess_exec(
                     "yt-dlp", "-f", "bestaudio", "-o", output_template,
-                    f"https://www.youtube.com/watch?v={youtube_link}",
+                    f"https://music.youtube.com/watch?v={youtube_link}",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )

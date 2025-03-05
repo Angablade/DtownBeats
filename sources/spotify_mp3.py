@@ -1,123 +1,66 @@
 ﻿import asyncio
-import os
 import re
-import shutil
-import subprocess
 import requests
 from bs4 import BeautifulSoup
-from spotdl import Spotdl
 
-class SpotifyAudioConverter:
-    """
-    Converts Spotify tracks to YouTube links using SpotDL.
-    """
-    SPOTIFY_TRACK_REGEX = r'https?://open\.spotify\.com/track/[\w]+'
-    CACHE_PATH = os.path.expanduser("~/.spotdl-cache")
+SPOTIFY_TRACK_REGEX = r'https?://open\.spotify\.com/track/[\w]+'
 
-    def __init__(self, url: str):
-        if not self.validate_url(url):
-            raise ValueError("Invalid Spotify URL")
-        self.url = url
+def validate_url(url: str) -> bool:
+    """Validates if the given URL is a Spotify track."""
+    return re.match(SPOTIFY_TRACK_REGEX, url) is not None
 
-    @staticmethod
-    def validate_url(url: str) -> bool:
-        """Validates if the given URL is a Spotify track."""
-        return re.match(SpotifyAudioConverter.SPOTIFY_TRACK_REGEX, url) is not None
+async def spotify_to_youtube(url: str):
+    if not validate_url(url):
+        raise ValueError("Invalid Spotify URL")
 
-    @staticmethod
-    def clear_cache():
-        """Clears SpotDL cache to avoid download conflicts."""
-        try:
-            if os.path.exists(SpotifyAudioConverter.CACHE_PATH):
-                shutil.rmtree(SpotifyAudioConverter.CACHE_PATH, ignore_errors=True)
-                print("✅ Cleared SpotDL cache.")
-            else:
-                print("ℹ️ No SpotDL cache found to clear.")
-        except Exception as e:
-            print(f"⚠️ Error removing SpotDL cache: {e}")
+    query = await get_spotify_title(url)
+    if not query:
+        print("❌ Failed to fetch Spotify title.")
+        return None
 
-    async def convert_to_youtube(self) -> str:
-        """Converts a Spotify track to a YouTube link using SpotDL."""
-        self.clear_cache()
-
-        try:
-            print(f"🎵 Running SpotDL for: {self.url}")
-
-            process = await asyncio.create_subprocess_exec(
-                "spotdl", self.url, "--force", "--overwrite", "force",
-                stdout=asyncio.subprocess.PIPE, 
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-
-            output = stdout.decode().strip()
-            error_output = stderr.decode().strip()
-
-            print(f"✅ SpotDL Output:\n{output}")
-            print(f"⚠️ SpotDL Errors:\n{error_output}")
-
-            if "youtube.com/watch?v=" in output:
-                youtube_link = output.split("youtube.com/watch?v=")[-1].split()[0]
-                print(f"🎥 Extracted YouTube Link: {youtube_link}")
-                return youtube_link
-
-            print("❌ SpotDL did not return a valid YouTube link.")
-            return None
-        except Exception as e:
-            print(f"❌ Error converting Spotify link: {e}")
-            return None
-
-async def get_spotify_audio(url: str):
-    """Helper function to convert a Spotify URL to a YouTube link."""
-    converter = SpotifyAudioConverter(url)
-    return await converter.convert_to_youtube()
-
-async def get_spotify_tracks_from_playlist(url):
+    search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
+    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Host': 'open.spotify.com',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Mode': 'navigate'
+    }
+
+    try:
+        response = requests.get(search_url, headers=headers)
+        response.raise_for_status()
+        video_ids = re.findall(r'watch\?v=([\w-]+)', response.text)
+        return video_ids[0] if video_ids else None
+    except requests.RequestException as e:
+        print(f"❌ Error fetching YouTube search results: {e}")
+        return None
+
+async def get_spotify_tracks_from_playlist(url):
+    """Extracts all track URLs from a Spotify playlist page."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
     }
     try:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
+        return list(set(re.findall(r'https://open\.spotify\.com/track/[\w]+', response.text)))
     except requests.RequestException as e:
         print(f"Error fetching playlist: {e}")
         return []
 
-    tracks = []
-    cont = response.text.split('"')
-    for itm in cont:
-        if "/track/" in itm:
-            tracks.append(itm)
-    return list(set(tracks))
-
-
 async def get_spotify_title(url):
-    pattern = re.compile(r"https://open\.spotify\.com/track/[a-zA-Z0-9]+(?:\?si=[a-zA-Z0-9]+)?")
-    
-    if not pattern.match(url):
-        return "-{Spotify Link}-"
+    """Fetches the title and artist from a Spotify track URL."""
+    if not validate_url(url):
+        return None
     
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        artist_tag = soup.find("meta", {"name": "music:musician_description"})
-        title_tag = soup.find("meta", {"property": "og:title"})
-        artist = artist_tag["content"] if artist_tag else None
-        title = title_tag["content"] if title_tag else None
-        
-        if artist and title:
-            return f"{artist} - {title}"
-        else:
-            return "-{Spotify Link}-"
-    
+        title = soup.find("meta", {"property": "og:title"})["content"]
+        artist = soup.find("meta", {"property": "music:musician"})["content"]
+
+        return f"{artist} - {title}" if artist and title else None
     except requests.RequestException:
-        return "-{Spotify Link}-"
+        return None
