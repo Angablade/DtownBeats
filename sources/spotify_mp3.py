@@ -36,7 +36,7 @@ class SpotifyAudioConverter:
         except Exception as e:
             print(f"⚠️ Error removing SpotDL cache: {e}")
 
-    async def convert_to_youtube(self) -> str | None:
+    async def convert_to_youtube(self) -> str:
         """Converts a Spotify track to a YouTube link using SpotDL."""
         self.clear_cache()
 
