@@ -67,7 +67,7 @@ class SpotifyAudioConverter:
             print(f"❌ Error converting Spotify link: {e}")
             return None
 
-async def get_spotify_audio(url: str) -> str | None:
+async def get_spotify_audio(url: str):
     """Helper function to convert a Spotify URL to a YouTube link."""
     converter = SpotifyAudioConverter(url)
     return await converter.convert_to_youtube()
