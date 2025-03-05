@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import os
 import re
 import shutil
@@ -18,22 +18,25 @@ class SpotifyAudioConverter:
         return re.match(r'https?://open\.spotify\.com/track/[\w]+', url) is not None
 
 async def convert_to_youtube(self):
-    """Converts a Spotify link to a YouTube link using SpotDL."""
+    """Converts a Spotify track to a YouTube link using SpotDL."""
+
+    # ✅ Clear SpotDL cache (fix potential cache issues)
     try:
         cache_path = os.path.expanduser("~/.spotdl-cache")
         if os.path.exists(cache_path):
-            shutil.rmtree(cache_path, ignore_errors=True) 
-            print("Cleared SpotDL cache.")
+            shutil.rmtree(cache_path, ignore_errors=True)
+            print("✅ Cleared SpotDL cache.")
         else:
-            print("No SpotDL cache found to clear.")
+            print("ℹ️ No SpotDL cache found to clear.")
     except Exception as x:
-        print(f"Error removing SpotDL cache: {x}")
+        print(f"⚠️ Error removing SpotDL cache: {x}")
 
     try:
-        print(f"Running SpotDL for: {self.url}")
+        print(f"🎵 Running SpotDL for: {self.url}")
 
+        # ✅ Ensure the command arguments are properly formatted
         process = await asyncio.create_subprocess_exec(
-            "spotdl", self.url, "--force", 
+            "spotdl", self.url, "--force", "--log-level", "DEBUG",
             stdout=asyncio.subprocess.PIPE, 
             stderr=asyncio.subprocess.PIPE
         )
@@ -42,17 +45,21 @@ async def convert_to_youtube(self):
         output = stdout.decode().strip()
         error_output = stderr.decode().strip()
 
-        print(f"SpotDL Output:\n{output}")
-        print(f"SpotDL Errors:\n{error_output}")
+        # ✅ **Better Debugging Output**
+        print(f"✅ SpotDL Output:\n{output}")
+        print(f"⚠️ SpotDL Errors:\n{error_output}")
 
+        # ✅ **Ensure SpotDL actually provides a YouTube link**
         if "youtube.com/watch?v=" in output:
-            return output.split("youtube.com/watch?v=")[-1].split()[0]
+            youtube_link = output.split("youtube.com/watch?v=")[-1].split()[0]
+            print(f"🎥 Extracted YouTube Link: {youtube_link}")
+            return youtube_link
         
-        print("SpotDL did not return a valid YouTube link.")
+        print("❌ SpotDL did not return a valid YouTube link.")
         return None
 
     except Exception as e:
-        print(f"Error converting Spotify link: {e}")
+        print(f"❌ Error converting Spotify link: {e}")
         return None
 
 
