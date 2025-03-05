@@ -1487,7 +1487,7 @@ async def spotify(ctx, url: str):
                 print(f"Error downloading {codec} format from {youtube_link}: {e}")
                 return False
         
-        def _download_sync(self, ydl_opts, url):
+        def _download_sync(ydl_opts, url):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(url, download=True)
         
