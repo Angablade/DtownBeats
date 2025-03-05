@@ -1416,7 +1416,9 @@ async def spotify(ctx, url: str):
         await handle_voice_connection(ctx)
         
         track_urls = [url]
-        
+                
+        debugger_message = await ctx.send(f"Processing spotify transaction....")
+
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
             try:
@@ -1425,40 +1427,44 @@ async def spotify(ctx, url: str):
                     await messagesender(bot, ctx.channel.id, "❌ Failed to retrieve tracks from Spotify playlist.")
                     return
             except Exception as e:
-                await messagesender(bot, ctx.channel.id, f"⚠️ Error processing playlist: {e}")
+                await messagesender(bot, ctx.channel.id, f"⚠️ Error processing Spotify: {e}")
                 return
 
         total_tracks = len(track_urls)
         if total_tracks == 0:
-            await messagesender(bot, ctx.channel.id, "❌ No tracks found in the playlist.")
+            await messagesender(bot, ctx.channel.id, "❌ No tracks found")
             return
 
-        progress_message = await ctx.send(f"🔄 Processing {total_tracks} tracks from the playlist...")
-        
+        progress_message = await ctx.send(f"🔄 Processing {total_tracks} tracks from Spotify")
+
         async def update_progress(current):
             bar_length = 20
             progress = current / total_tracks
             filled_length = int(bar_length * progress)
             bar = "█" * filled_length + "░" * (bar_length - filled_length)
-            await progress_message.edit(content=f"🔄 Processing Spotify playlist...\n[{bar}] {current}/{total_tracks}")
+            await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
 
         async def process_track(track_url):
             try:
                 print(f"🔍 Converting track: {track_url}")
                 youtube_link = await spotify_to_youtube(track_url)
                 if not youtube_link:
-                    print(f"❌ Failed to convert {track_url} to YouTube.")
+                    print(f"❌ Failed to convert {track_url}")
+                    await debugger_message.edit(content=f"❌ Failed to convert {track_url}")
+                    await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
                     return None
 
                 file_path = await download_audio(youtube_link)
                 if not file_path:
                     print(f"❌ Failed to download track from {youtube_link}.")
+                    await debugger_message.edit(content=f"❌ Failed to download track from {youtube_link}.")
                     return None
 
                 spotify_title = await get_spotify_title(track_url)
                 return file_path, spotify_title
             except Exception as e:
                 print(f"⚠️ Error processing track {track_url}: {e}")
+                await debugger_message.edit(content=f"⚠️ Error processing track {track_url}: {e}")
                 return None
         
         async def download_audio(youtube_link):
@@ -1474,17 +1480,20 @@ async def spotify(ctx, url: str):
                 
                 if process.returncode != 0:
                     print(f"❌ yt-dlp Error:\n{stderr.decode().strip()}")
+                    await debugger_message.edit(content=f"❌ yt-dlp Error:\n{stderr.decode().strip()}")
                     return None
                 
                 output_lines = stdout.decode().split("\n")
                 for line in output_lines:
-                    if line.strip().endswith((".webm", ".m4a", ".mp3")):
+                    if line.strip().endswith((".mp3", ".opus")):
                         return f"/app/music/{line.strip()}"
-                
+
                 print("❌ yt-dlp completed but no valid file found.")
+                await debugger_message.edit(content=f"❌ yt-dlp completed but no valid file found.")
                 return None
             except Exception as e:
                 print(f"❌ Error downloading YouTube audio: {e}")
+                await debugger_message.edit(content=f"❌ Error downloading YouTube audio: {e}")
                 return None
         
         tasks = [process_track(url) for url in track_urls]
