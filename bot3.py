@@ -296,7 +296,6 @@ async def messagesender(bot, channel_id, content=None, embed=None, command_messa
             print(f"[Error] Failed to send message: {e}")
             return
 
-    # Store messages if command_message is provided
     if command_message:
         message_map[command_message.id] = messages
 
@@ -1496,11 +1495,9 @@ async def spotify(ctx, url: str):
         
         queue_count = 0
         for idx, result in enumerate(results, start=1):
-            await messagesender(bot, ctx.channel.id, "Fuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu")
-            await update_progress(idx)
+             await update_progress(idx)
             if result:
                 file_path, spotify_title = result
-                await messagesender(bot, ctx.channel.id, f"{file_path} | {spotify_title}")
                 await server_queues[guild_id].put([file_path, spotify_title])
                 queue_count += 1
 
