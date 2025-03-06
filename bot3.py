@@ -16,6 +16,7 @@ import time
 import platform
 import resource
 import logging
+import ffmpeg
 
 from utils.voice_utils import start_listening, stop_listening
 from utils.youtube_pl import grab_youtube_pl
@@ -316,6 +317,13 @@ async def check_empty_channel(ctx):
             return
         await ctx.voice_client.disconnect()
 
+async def ffmpeg_get_track_length(path):
+    try:
+        metadata = ffmpeg.probe(path)
+        duration = float(metadata['format']['duration'])
+        return duration
+    except ffmpeg.Error as e:
+        return None
 
 async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
     startermessage = f"Fetching playlist: ({playlist_id})\n"
@@ -398,7 +406,6 @@ async def play_next(ctx, voice_client):
 
         bot.intentional_disconnections[guild_id] = False
 
-
 async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id):
     guild_id = ctx.guild.id
     if is_banned_title(video_title):
@@ -413,7 +420,9 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         title = track_info.get("title", video_title)
         duration = track_info.get("duration", "0")
         if duration is None:
-            duration = 0
+            duration = await ffmpeg_get_track_length(audio_file)
+            if duration is None:
+                duration = 0
         else:
             duration = int(duration) // 1000
     else:
@@ -433,7 +442,13 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     )
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
-    embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
+
+    if duration == 0:
+       embed.add_field(name="Duration", value=f"Unknown", inline=True) 
+    elif duration == None:
+
+    else:
+        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
     
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
@@ -590,7 +605,7 @@ async def play(ctx, *, srch: str):
         elif re.match(patterns["spotify"], srch):
             await spotify(ctx, srch)
         elif re.match(patterns["applemusic"], srch):
-            await applemusic(cxx, srch)
+            await applemusic(ctx, srch)
         else:
             await youtube(ctx, search=srch)
 
@@ -1521,7 +1536,7 @@ async def applemusic(ctx, url: str):
         await handle_voice_connection(ctx)
     
         await messagesender(bot, ctx.channel.id, f"Processing Apple Music link: <{url}>")
-        youtube_link = await get_apple_music_audio(url)
+        youtube_link = await get_apple_music_audio(ctx, url)
         if youtube_link:
             file_path = await get_audio_filename(youtube_link)
             if file_path:
