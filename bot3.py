@@ -1420,7 +1420,6 @@ async def spotify(ctx, url: str):
         
         track_urls = [url]
                 
-        debugger_message = await ctx.send(f"Processing spotify transaction....")
 
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
@@ -1453,7 +1452,6 @@ async def spotify(ctx, url: str):
                 youtube_link = await spotify_to_youtube(track_url)
                 if not youtube_link:
                     print(f"❌ Failed to convert {track_url}")
-                    await debugger_message.edit(content=f"❌ Failed to convert {track_url}")
                     await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
                     return None
 
@@ -1463,7 +1461,6 @@ async def spotify(ctx, url: str):
 
             except Exception as e:
                 print(f"⚠️ Error processing track {track_url}: {e}")
-                await debugger_message.edit(content=f"⚠️ Error processing track {track_url}: {e}")
                 return None
         
         async def download_audio(youtube_link):
