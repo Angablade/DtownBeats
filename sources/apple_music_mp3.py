@@ -15,9 +15,12 @@ class AppleMusicScraper:
         return re.match(r'https?://music\.apple\.com/.+/song/.+/.+', url) is not None
 
     async def scrape_metadata(self):
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+        }
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.url) as response:
+                async with session.get(self.url, headers=headers) as response:
                     html = await response.text()
                     soup = BeautifulSoup(html, "html.parser")
                     title = soup.find("title").text.replace(" - Apple Music", "").strip()
@@ -31,8 +34,11 @@ class AppleMusicScraper:
         if not metadata:
             return None
         search_url = f"https://www.youtube.com/results?search_query={metadata.replace(' ', '+')}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+        }
         async with aiohttp.ClientSession() as session:
-            async with session.get(search_url) as response:
+            async with session.get(search_url, headers=headers) as response:
                 html = await response.text()
                 video_ids = re.findall(r'"videoId":"([\w-]{11})"', html)
                 return f"https://www.youtube.com/watch?v={video_ids[0]}" if video_ids else None
