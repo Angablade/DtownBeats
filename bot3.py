@@ -1002,13 +1002,14 @@ async def version(ctx):
 @bot.command(name="cmds", aliases=["commands"])
 async def help_command(ctx):
     async with ctx.typing():
-        """Sends a list of commands in a direct message with a table layout."""
-        embed = Embed(title="📜 Bot Commands (1/2)", description="Here is a list of all available commands:", color=discord.Color.blue())
+        """Sends a list of commands in three separate messages."""
+        
+        # 📜 Part 1: Music & Queue Commands
+        embed1 = Embed(title="📜 Bot Commands (1/3)", description="🎵 **Music & Queue Commands**", color=discord.Color.blue())
 
-        # 🎵 Music Commands
-        embed.add_field(name="🎵 **Music Commands**", value="""
+        embed1.add_field(name="🎵 **Music Commands**", value="""
         **Command**       | **Aliases**       | **Description**
-        ------------------|-------------------|------------------------------------------------
+        ------------------|------------------|------------------------------------------------
         play <query>      | None              | Play a song, detecting source automatically.
         youtube <query>   | yt                | Play a YouTube song or playlist.
         bandcamp <url>    | bc                | Play a track from Bandcamp.
@@ -1018,17 +1019,13 @@ async def help_command(ctx):
         stop              | None              | Stop the bot and leave the voice channel.
         pause             | hold              | Pause the currently playing track.
         resume            | continue          | Resume the paused track.
-        search <query>    | find              | Show up to 5 YouTube search results.
         nowplaying        | np, current       | Show details of the current song.
         seek <time/%>     | None              | Seek to a timestamp or percentage.
         volume <0-200>    | vol               | Adjust playback volume (0-200%).
         shuffle           | None              | Shuffle the queue.
         """, inline=False)
 
-        embed.add_field(name="", value="", inline=False)  # Empty space
-
-        # ⌚ Queue Commands
-        embed.add_field(name="⌚ **Queue Commands**", value="""
+        embed1.add_field(name="⌚ **Queue Commands**", value="""
         **Command**       | **Aliases**  | **Description**
         ------------------|--------------|----------------------------------------
         queue             | list         | Display the current queue.
@@ -1042,10 +1039,10 @@ async def help_command(ctx):
         autoplay <on/off> | autodj       | Toggle autoplay mode.
         """, inline=False)
 
-        embed.add_field(name="", value="", inline=False)  # Empty space
+        # 🔇 Part 2: Control & Voice Commands
+        embed2 = Embed(title="📜 Bot Commands (2/3)", description="🔇 **Control & Voice Commands**", color=discord.Color.blue())
 
-        # 🔇 Control Commands
-        embed.add_field(name="🔇 **Control Commands**", value="""
+        embed2.add_field(name="🔇 **Control Commands**", value="""
         **Command**  | **Aliases** | **Description**
         ----------|-----------|--------------------------------
         mute      | quiet     | Toggle mute/unmute.
@@ -1053,30 +1050,23 @@ async def help_command(ctx):
         leave     | go        | Disconnect the bot from voice.
         """, inline=False)
 
-        await messagesender(bot, ctx.author.id, embed=embed)
-        embed = Embed(title="📜 Bot Commands (2/2)", description="Here is a list of all available commands:", color=discord.Color.blue())
-
-        # 🎤 Voice Commands
-        embed.add_field(name="🎤 **Voice Control Commands**", value="""
+        embed2.add_field(name="🎤 **Voice Control Commands**", value="""
         **Command**       | **Voice Trigger**      | **Description**
         ------------------|------------------------|----------------------------
         listen            | Music bot listen       | Enable voice command mode.
         unlisten          | Music bot unlisten     | Disable voice command mode.
         """, inline=False)
 
-        embed.add_field(name="", value="", inline=False)  # Empty space
-
-        # 📜 Lyrics Commands
-        embed.add_field(name="📜 **Lyrics Commands**", value="""
+        embed2.add_field(name="📜 **Lyrics Commands**", value="""
         **Command**   | **Aliases** | **Description**
         --------------|-------------|-------------------------------------------
         lyrics <song> | None        | Fetch lyrics for the specified/current song.
         """, inline=False)
 
-        embed.add_field(name="", value="", inline=False)  # Empty space
+        # ⚙️ Part 3: Configuration, Admin & Other Commands
+        embed3 = Embed(title="📜 Bot Commands (3/3)", description="⚙️ **Configuration & Admin Commands**", color=discord.Color.blue())
 
-        # ⚙️ Configuration Commands
-        embed.add_field(name="⚙️ **Configuration Commands**", value="""
+        embed3.add_field(name="⚙️ **Configuration Commands**", value="""
         **Command**       | **Aliases**  | **Description**
         ------------------|--------------|------------------------------------
         setprefix <p>     | prefix       | Change the bot's prefix.
@@ -1084,10 +1074,7 @@ async def help_command(ctx):
         setchannel <c>    | None         | Restrict bot commands to a channel.
         """, inline=False)
 
-        embed.add_field(name="", value="", inline=False)  # Empty space
-
-        # 📇 Other Commands
-        embed.add_field(name="📇 **Other Commands**", value="""
+        embed3.add_field(name="📇 **Other Commands**", value="""
         **Command** | **Aliases** | **Description**
         ------------|-------------|-------------------------------------------
         version     | ver         | DM the bot version info.
@@ -1097,10 +1084,7 @@ async def help_command(ctx):
         invite      | link        | Get an invite link for the bot.
         """, inline=False)
 
-        embed.add_field(name="", value="", inline=False)  # Empty space
-
-        # 🛠️ Admin Commands
-        embed.add_field(name="🛠️ **Admin Commands**", value="""
+        embed3.add_field(name="🛠️ **Admin Commands**", value="""
         **Command**  | **Aliases**        | **Description**
         ----------|--------------|--------------------------------------
         shutdown  | die          | Shut down the bot (owner only).
@@ -1108,13 +1092,18 @@ async def help_command(ctx):
         dockboot  | dockerrestart| Restart Docker container (owner only).
         """, inline=False)
 
-        await messagesender(bot, ctx.author.id, embed=embed)
+        # Send the commands as separate messages
+        await ctx.author.send(embed=embed1)
+        await ctx.author.send(embed=embed2)
+        await ctx.author.send(embed=embed3)
 
+        # Notify user
         username = ctx.message.author.mention
-        try:   
-            await messagesender(bot, ctx.channel.id, content=f"{username}, I've sent you a DM with the list of commands. 📬")
+        try:
+            await ctx.send(f"{username}, I've sent you a DM with the list of commands. 📬")
         except discord.Forbidden:
-            await messagesender(bot, ctx.channel.id, content=f"{username}, I couldn't send you a DM. Please check your privacy settings.")
+            await ctx.send(f"{username}, I couldn't send you a DM. Please check your privacy settings.")
+
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
