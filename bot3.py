@@ -1,4 +1,4 @@
-timport discord
+import discord
 import os
 import re
 import sys
