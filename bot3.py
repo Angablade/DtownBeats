@@ -1002,8 +1002,9 @@ async def version(ctx):
 @bot.command(name="cmds", aliases=["commands"])
 async def help_command(ctx):
     async with ctx.typing():
-        """Sends a list of commands in three separate messages."""
-        
+        """Sends a list of commands in three separate messages. Admin commands are shown only to the bot owner."""
+        is_owner = ctx.author.id == BOT_OWNER_ID
+
         # 📜 Part 1: Music & Queue Commands
         embed1 = Embed(title="📜 Bot Commands (1/3)", description="🎵 **Music & Queue Commands**", color=discord.Color.blue())
 
@@ -1063,8 +1064,8 @@ async def help_command(ctx):
         lyrics <song> | None        | Fetch lyrics for the specified/current song.
         """, inline=False)
 
-        # ⚙️ Part 3: Configuration, Admin & Other Commands
-        embed3 = Embed(title="📜 Bot Commands (3/3)", description="⚙️ **Configuration & Admin Commands**", color=discord.Color.blue())
+        # ⚙️ Part 3: Configuration & Admin Commands (Only shown if user is the bot owner)
+        embed3 = Embed(title="📜 Bot Commands (3/3)", description="⚙️ **Configuration & Other Commands**", color=discord.Color.blue())
 
         embed3.add_field(name="⚙️ **Configuration Commands**", value="""
         **Command**       | **Aliases**  | **Description**
@@ -1084,20 +1085,21 @@ async def help_command(ctx):
         invite      | link        | Get an invite link for the bot.
         """, inline=False)
 
-        embed3.add_field(name="🛠️ **Admin Commands**", value="""
-        **Command**  | **Aliases**        | **Description**
-        ----------|--------------|--------------------------------------
-        shutdown  | die          | Shut down the bot (owner only).
-        reboot    | restart      | Restart the bot (owner only).
-        dockboot  | dockerrestart| Restart Docker container (owner only).
-        """, inline=False)
+        if is_owner:
+            embed3.add_field(name="🛠️ **Admin Commands (Owner Only)**", value="""
+            **Command**  | **Aliases**        | **Description**
+            ----------|--------------|--------------------------------------
+            shutdown  | die          | Shut down the bot (owner only).
+            reboot    | restart      | Restart the bot (owner only).
+            dockboot  | dockerrestart| Restart Docker container (owner only).
+            """, inline=False)
 
-        # Send the commands as separate messages
+        # Send the command list in separate messages
         await ctx.author.send(embed=embed1)
         await ctx.author.send(embed=embed2)
         await ctx.author.send(embed=embed3)
 
-        # Notify user
+        # Notify the user in the channel
         username = ctx.message.author.mention
         try:
             await ctx.send(f"{username}, I've sent you a DM with the list of commands. 📬")
