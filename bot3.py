@@ -1061,7 +1061,7 @@ async def help_command(ctx):
         embed2.add_field(name="📜 **Lyrics Commands**", value="""
         **Command**   | **Aliases** | **Description**
         --------------|-------------|-------------------------------------------
-        lyrics <song> | None        | Fetch lyrics for the specified/current song.
+        lyrics <song> | lyr         | Fetch lyrics for the specified/current song.
         """, inline=False)
 
         # ⚙️ Part 3: Configuration & Admin Commands (Only shown if user is the bot owner)
@@ -1089,9 +1089,12 @@ async def help_command(ctx):
             embed3.add_field(name="🛠️ **Admin Commands (Owner Only)**", value="""
             **Command**  | **Aliases**        | **Description**
             ----------|--------------|--------------------------------------
-            shutdown  | die          | Shut down the bot (owner only).
-            reboot    | restart      | Restart the bot (owner only).
-            dockboot  | dockerrestart| Restart Docker container (owner only).
+            shutdown  | die          | Shut down the bot.
+            reboot    | restart      | Restart the bot.
+            dockboot  | dockerrestart| Restart Docker container.
+            forceplay | fplay        | Force play a song.
+            fetchlogs | logs         | Fetch the bot logs.
+            setnick   | nickname     | Change the bot's nickname.
             """, inline=False)
 
         # Send the command list in separate messages
@@ -1175,6 +1178,18 @@ async def seek(ctx, position: str):
         except Exception as e:
             await messagesender(bot, ctx.channel.id, f"An error occurred while seeking: {e}")
 
+@bot.command(name="setnick", aliases=["nickname"])
+async def setnick(ctx, *, nickname: str = None):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+
+    try:
+        await ctx.guild.me.edit(nick=nickname)
+        await messagesender(bot, ctx.channel.id, content=f"Bot nickname changed to `{nickname}`")
+    except Exception as e:
+        await messagesender(bot, ctx.channel.id, content=f"Failed to change nickname: {e}")
+
 
 @bot.command(name="mute", aliases=["quiet"])
 async def toggle_mute(ctx):
@@ -1195,7 +1210,7 @@ async def toggle_mute(ctx):
         else:
             await messagesender(bot, ctx.channel.id, content="I'm not playing anything to mute or unmute.")
 
-@bot.command(name="lyrics")
+@bot.command(name="lyrics", aliases=["lyr"])
 async def lyrics(ctx, *, song: str = None):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -1328,6 +1343,34 @@ async def leave_channel(ctx):
             await messagesender(bot, ctx.channel.id, content="Disconnected from the voice channel. 👋")
         else:
             await messagesender(bot, ctx.channel.id, content="I'm not in a voice channel to leave.")
+
+@bot.command(name="forceplay", aliases=["fplay"])
+async def forceplay(ctx, *, query: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+
+    video_id = await fetch_video_id(ctx, query)
+    if video_id:
+        ctx.voice_client.stop()
+        await queue_and_play_next(ctx, ctx.guild.id, video_id)
+        await messagesender(bot, ctx.channel.id, content=f"Now playing `{query}` (forced).")
+    else:
+        await messagesender(bot, ctx.channel.id, content="Failed to find the track.")
+
+@bot.command(name="fetchlogs", aliases=["logs"])
+async def fetchlogs(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+
+    log_path = "/app/config/debug.log"
+    if os.path.exists(log_path):
+        await ctx.author.send(file=discord.File(log_path, filename="debug.log"))
+        await messagesender(bot, ctx.channel.id, content="Sent debug logs via DM.")
+    else:
+        await messagesender(bot, ctx.channel.id, content="Log file not found.")
+
 
 @bot.command(name="sendplox", aliases=["dlfile"])
 async def sendmp3(ctx):
