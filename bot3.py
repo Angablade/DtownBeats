@@ -1,4 +1,4 @@
-import discord
+timport discord
 import os
 import re
 import sys
@@ -444,9 +444,9 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     embed.add_field(name="Artist", value=artist, inline=True)
 
     if duration == 0:
-       embed.add_field(name="Duration", value=f"Unknown", inline=True) 
+        embed.add_field(name="Duration", value=f"Unknown", inline=True) 
     elif duration == None:
-
+        embed.add_field(name="Duration", value=f"Unknown", inline=True) 
     else:
         embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
     
