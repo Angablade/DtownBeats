@@ -1548,6 +1548,11 @@ async def version(ctx):
         except discord.Forbidden:
             await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
 
+import os
+import shutil
+import subprocess
+import discord
+
 @bot.command(name="sendplox", aliases=["dlfile"])
 async def sendmp3(ctx):
     async with ctx.typing():
@@ -1557,10 +1562,26 @@ async def sendmp3(ctx):
 
         dir_path = os.path.dirname(os.path.realpath(__file__)).replace("\\", "/")
         current_track = current_tracks.get(guild_id, {}).get("current_track")
-        file_path = f"music/{''.join(current_track[:1])}.mp3"
-        if not os.path.exists(file_path):
+        
+        if not current_track:
+            await messagesender(bot, ctx.channel.id, content="No current track found.")
+            return
+        
+        base_filename, _ = os.path.splitext(current_track)
+        
+        possible_extensions = [".mp3", ".opus"]
+        
+        file_path = None
+        for ext in possible_extensions:
+            path = f"music/{base_filename}{ext}"
+            if os.path.exists(path):
+                file_path = path
+                break
+        
+        if not file_path:
             await messagesender(bot, ctx.channel.id, content="File not found.")
             return
+
         file_size = os.path.getsize(file_path)
         if file_size > 8 * 1024 * 1024:
             zip_path = file_path + ".zip"
@@ -1584,6 +1605,7 @@ async def sendmp3(ctx):
             with open(file_path, 'rb') as file:
                 await ctx.author.typing()
                 await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
+
 
 @bot.command(name="blacklist")
 async def blacklist(ctx, *, song: str):
