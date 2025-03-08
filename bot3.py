@@ -56,6 +56,9 @@ VOLUME_CONFIG_PATH = "config/volume.json"
 QUEUE_BACKUP_DIR = "config/queuebackup/"
 BANNED_USERS_PATH = "config/banned.json"
 COMMANDS_FILE_PATH = "config/commands.txt"
+STATS_CONFIG_PATH = "config/stats_config.json"
+BLACKLIST_PATH = "config/blackwhitelist.json"
+DEBUG_CONFIG_PATH = "config/debug_mode.json"
 
 #INITIALIZATION
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
@@ -63,7 +66,6 @@ executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 os.makedirs(QUEUE_BACKUP_DIR, exist_ok=True)
-os.makedirs(os.path.dirname(BANNED_USERS_PATH), exist_ok=True)
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
 if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "w") as f:
@@ -122,6 +124,12 @@ def get_backup_path(guild_id=None):
     return os.path.join(QUEUE_BACKUP_DIR, "global_backup.json")
 
 def save_queue_backup(guild_id=None):
+    try:
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+    except:
+        print("No Queues initalized. Failed to save queue backup.")
+
     backup_path = get_backup_path(guild_id)
     backup_data = {}
     
@@ -135,6 +143,12 @@ def save_queue_backup(guild_id=None):
         json.dump(backup_data, f, indent=4)
 
 def load_queue_backup(guild_id=None):
+    try:
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+    except:
+        print("No Queues initalized. Failed to load queue backup.")
+
     backup_path = get_backup_path(guild_id)
     if os.path.exists(backup_path):
         with open(backup_path, "r") as f:
@@ -150,6 +164,36 @@ def load_banned_users():
 def save_banned_users(banned_data):
     with open(BANNED_USERS_PATH, "w") as f:
         json.dump(banned_data, f, indent=4)
+
+def load_stats_config():
+    if os.path.exists(STATS_CONFIG_PATH):
+        with open(STATS_CONFIG_PATH, "r") as f:
+            return json.load(f)
+    return {"show_stats": True}
+
+def save_stats_config(config_data):
+    with open(STATS_CONFIG_PATH, "w") as f:
+        json.dump(config_data, f, indent=4)
+
+def load_blacklist():
+    if os.path.exists(BLACKLIST_PATH):
+        with open(BLACKLIST_PATH, "r") as f:
+            return json.load(f)
+    return {"blacklist": [], "whitelist": []}
+
+def save_blacklist(data):
+    with open(BLACKLIST_PATH, "w") as f:
+        json.dump(data, f, indent=4)
+
+def load_debug_mode():
+    if os.path.exists(DEBUG_CONFIG_PATH):
+        with open(DEBUG_CONFIG_PATH, "r") as f:
+            return json.load(f)
+    return {"debug": False}
+
+def save_debug_mode(config_data):
+    with open(DEBUG_CONFIG_PATH, "w") as f:
+        json.dump(config_data, f, indent=4)
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -172,6 +216,16 @@ autoplay_enabled = {}
 message_map = {}
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
+stats_config = load_stats_config()
+blacklist_data = load_blacklist()
+debug_config = load_debug_mode()
+last_active_channels = {} 
+
+@bot.event
+async def on_message(message):
+    if message.guild:
+        last_active_channels[message.guild.id] = message.channel.id
+    await bot.process_commands(message)
 
 async def download_audio(video_id):
     try: 
@@ -305,7 +359,9 @@ def is_banned_title(title):
     ]
     
     title = title.lower().strip()
-    return any(keyword in title for keyword in banned_keywords)
+    
+    # Check both hardcoded and stored blacklist
+    return any(keyword in title for keyword in banned_keywords) or title in blacklist_data["blacklist"]
 
 async def messagesender(bot, channel_id, content=None, embed=None, command_message=None, file=None):
     channel = bot.get_channel(channel_id)
@@ -550,6 +606,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 async def on_ready():
     try:
         print(f"Bot is ready! Logged in as {bot.user}")
+        await update_bot_presence()
     except Exception as e:
         print(f"Error in on_ready: {e}")
 
@@ -1379,6 +1436,7 @@ async def restore_queue(ctx, scope: str = "guild"):
         for item in backup_data.get(str(ctx.guild.id), []):
             await server_queues[ctx.guild.id].put(item)
         await messagesender(bot, ctx.channel.id, content=f"Queue restored for {ctx.guild.name}.")
+
 @bot.command(name="banuser")
 async def banuser(ctx, user: discord.User):
     if ctx.author.id != BOT_OWNER_ID:
@@ -1454,7 +1512,7 @@ async def version(ctx):
     async with ctx.typing():
                                             #[HHMMSS-DDMMYYYY]
         embed = discord.Embed(
-            title=f"DtownBeats - Version 0.4D [043718-08032025]",
+            title=f"DtownBeats - Version 0.4E [173344-08032025]",
             description="🎵 Bringing beats to your server with style!",
             color=discord.Color.dark_blue()
         )
@@ -1526,6 +1584,50 @@ async def sendmp3(ctx):
             with open(file_path, 'rb') as file:
                 await ctx.author.typing()
                 await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
+
+@bot.command(name="blacklist")
+async def blacklist(ctx, *, song: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if song.lower() not in blacklist_data["blacklist"]:
+        blacklist_data["blacklist"].append(song.lower())
+        save_blacklist(blacklist_data)
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` has been blacklisted.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is already blacklisted.")
+
+@bot.command(name="whitelist")
+async def whitelist(ctx, *, song: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if song.lower() in blacklist_data["blacklist"]:
+        blacklist_data["blacklist"].remove(song.lower())
+        save_blacklist(blacklist_data)
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` has been removed from the blacklist.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is not in the blacklist.")
+
+@bot.command(name="blacklistcheck")
+async def blacklist_check(ctx, *, song: str):
+    if is_banned_title(song):
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is blacklisted.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is not blacklisted.")
+
+@bot.command(name="debugmode")
+async def toggle_debug(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    debug_config["debug"] = not debug_config["debug"]
+    save_debug_mode(debug_config)
+    state = "enabled" if debug_config["debug"] else "disabled"
+    await messagesender(bot, ctx.channel.id, content=f"Debug mode has been {state}.")
 
 @bot.command(name="bandcamp", aliases=["bc"])
 async def bandcamp(ctx, url: str):
@@ -1752,6 +1854,77 @@ async def stats(ctx):
 
     await ctx.send(embed=embed)
 
+@bot.command(name="showstats")
+async def toggle_stats(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    stats_config["show_stats"] = not stats_config["show_stats"]
+    save_stats_config(stats_config)
+    
+    await update_bot_presence()
+    
+    state = "enabled" if stats_config["show_stats"] else "disabled"
+    await messagesender(bot, ctx.channel.id, content=f"Bot stats display has been {state}.")
+
+@bot.command(name="purgequeues")
+async def purge_queues(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    global server_queues
+    cleared_count = 0
+    
+    for guild_id in list(server_queues.keys()):
+        if isinstance(server_queues[guild_id], asyncio.Queue):
+            server_queues[guild_id] = asyncio.Queue()
+            cleared_count += 1
+    
+    await messagesender(bot, ctx.channel.id, content=f"Cleared queues for {cleared_count} servers.")
+
+@bot.command(name="sendglobalmsg")
+async def send_global_message(ctx, *, message: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    success_count = 0
+    failure_count = 0
+    
+    for guild in bot.guilds:
+        target_channel = None
+        
+        # Check last active channel first
+        if guild.id in last_active_channels:
+            target_channel = bot.get_channel(last_active_channels[guild.id])
+        
+        # If no active channel, try #general or #voice
+        if not target_channel:
+            for channel in guild.text_channels:
+                if channel.name in ["general", "voice"] and channel.permissions_for(guild.me).send_messages:
+                    target_channel = channel
+                    break
+        
+        # If still no target, find the first text channel the bot can send messages in
+        if not target_channel:
+            for channel in guild.text_channels:
+                if channel.permissions_for(guild.me).send_messages:
+                    target_channel = channel
+                    break
+        
+        if target_channel:
+            try:
+                await target_channel.send(message)
+                success_count += 1
+            except Exception:
+                failure_count += 1
+        else:
+            failure_count += 1
+    
+    await messagesender(bot, ctx.channel.id, content=f"Message sent to {success_count} servers. Failed in {failure_count}.")
+
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
     
@@ -1842,6 +2015,14 @@ def search_musicbrainz(query):
     except musicbrainzngs.ResponseError as e:
         print(f"MusicBrainz API error: {e}")
         return None
+
+async def update_bot_presence():
+    """ Updates the bot's presence based on the stats setting. """
+    if stats_config["show_stats"]:
+        guild_count = len(bot.guilds)
+        await bot.change_presence(activity=discord.Game(name=f"Serving {guild_count} servers"))
+    else:
+        await bot.change_presence(activity=None)
 
 @bot.event
 async def on_command_error(ctx, error):
