@@ -1448,8 +1448,6 @@ async def fetchlogs(ctx):
             await ctx.author.typing()
             await ctx.author.send(file=discord.File(file, filename=os.path.basename(LOG_FILE)))
             await messagesender(bot, ctx.channel.id, content="Sent debug logs via DM.")
-    else:
-        await messagesender(bot, ctx.channel.id, content="Log file not found.")
 
 @bot.command(name="version", aliases=["ver"])
 async def version(ctx):
