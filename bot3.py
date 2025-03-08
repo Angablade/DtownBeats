@@ -38,6 +38,7 @@ from discord.ui import View, Button
 from discord import FFmpegPCMAudio, Embed
 from fuzzywuzzy import fuzz
 
+#ENVIRONMENT VARIABLES
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
 MUSICBRAINZ_CONTACT = os.getenv("MUSICBRAINZ_CONTACT", "default@example.com")
@@ -48,13 +49,21 @@ QUEUE_PAGE_SIZE = int(os.getenv("QUEUE_PAGE_SIZE","10"))
 HISTORY_PAGE_SIZE = int(os.getenv("HISTORY_PAGE_SIZE","10"))
 TIMEOUT_TIME = int(os.getenv("TIMEOUT_TIME", "60"))
 
-LOG_FILE = "/app/config/debug.log"
+#CONFIGS
+LOG_FILE = "config/debug.log"
 CONFIG_FILE = "config/server_config.json"
+VOLUME_CONFIG_PATH = "config/volume.json"
+QUEUE_BACKUP_DIR = "config/queuebackup/"
+BANNED_USERS_PATH = "config/banned.json"
+COMMANDS_FILE_PATH = "config/commands.txt"
 
+#INITIALIZATION
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 executor = ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
+os.makedirs(QUEUE_BACKUP_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(BANNED_USERS_PATH), exist_ok=True)
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
 if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "w") as f:
@@ -97,6 +106,51 @@ async def get_prefix(bot, message):
         return config.get("prefix", "!")
     return "!"
 
+def load_volume_settings():
+    if os.path.exists(VOLUME_CONFIG_PATH):
+        with open(VOLUME_CONFIG_PATH, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_volume_settings(volume_data):
+    with open(VOLUME_CONFIG_PATH, "w") as f:
+        json.dump(volume_data, f, indent=4)
+
+def get_backup_path(guild_id=None):
+    if guild_id:
+        return os.path.join(QUEUE_BACKUP_DIR, f"{guild_id}.json")
+    return os.path.join(QUEUE_BACKUP_DIR, "global_backup.json")
+
+def save_queue_backup(guild_id=None):
+    backup_path = get_backup_path(guild_id)
+    backup_data = {}
+    
+    if guild_id:
+        backup_data[guild_id] = list(server_queues.get(guild_id, asyncio.Queue())._queue)
+    else:
+        for gid, queue in server_queues.items():
+            backup_data[gid] = list(queue._queue)
+    
+    with open(backup_path, "w") as f:
+        json.dump(backup_data, f, indent=4)
+
+def load_queue_backup(guild_id=None):
+    backup_path = get_backup_path(guild_id)
+    if os.path.exists(backup_path):
+        with open(backup_path, "r") as f:
+            return json.load(f)
+    return {}
+
+def load_banned_users():
+    if os.path.exists(BANNED_USERS_PATH):
+        with open(BANNED_USERS_PATH, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_banned_users(banned_data):
+    with open(BANNED_USERS_PATH, "w") as f:
+        json.dump(banned_data, f, indent=4)
+
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
@@ -116,6 +170,8 @@ queue_paused = {}
 track_history = {}
 autoplay_enabled = {}
 message_map = {}
+guild_volumes = load_volume_settings()
+banned_users = load_banned_users()
 
 async def download_audio(video_id):
     try: 
@@ -127,10 +183,14 @@ async def download_audio(video_id):
         return None
 
 async def check_perms(ctx, guild_id):
+    if ctx.author.id in banned_users:
+        await messagesender(bot, ctx.channel.id, content="You are banned from using this bot.")
+        return False
+
     config = get_server_config(guild_id)
     dj_role_id = config.get("dj_role")
     designated_channel_id = config.get("channel")
-    
+
     if dj_role_id:
         dj_role = discord.utils.get(ctx.guild.roles, id=dj_role_id)
         if dj_role not in ctx.author.roles:
@@ -140,8 +200,9 @@ async def check_perms(ctx, guild_id):
     if designated_channel_id and ctx.channel.id != designated_channel_id:
         designated_channel = discord.utils.get(ctx.guild.channels, id=designated_channel_id)
         return False
-    
+
     return True
+
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -151,6 +212,11 @@ async def on_voice_state_update(member, before, after):
             return
 
         guild_id = before.channel.guild.id
+
+        if guild_id in guild_volumes:
+            if after.channel.guild.voice_client:
+                after.channel.guild.voice_client.source = discord.PCMVolumeTransformer(after.channel.guild.voice_client.source)
+                after.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
 
         if guild_id in bot.timeout_tasks:
             bot.timeout_tasks[guild_id].cancel()
@@ -177,6 +243,7 @@ async def on_voice_state_update(member, before, after):
                         print(f"Failed to reconnect: {e}")
             else:
                 bot.intentional_disconnections[guild_id] = False
+    await asyncio.sleep(1)
 
 
 @bot.event
@@ -1002,113 +1069,74 @@ async def version(ctx):
 @bot.command(name="cmds", aliases=["commands"])
 async def help_command(ctx):
     async with ctx.typing():
-        """Sends a list of commands in three separate messages. Admin commands are shown only to the bot owner."""
-        is_owner = ctx.author.id == BOT_OWNER_ID
-
-        # 📜 Part 1: Music & Queue Commands
-        embed1 = Embed(title="📜 Bot Commands (1/3)", description="🎵 **Music & Queue Commands**", color=discord.Color.blue())
-
-        embed1.add_field(name="🎵 **Music Commands**", value="""
-        **Command**       | **Aliases**       | **Description**
-        ------------------|------------------|------------------------------------------------
-        play <query>      | None              | Play a song, detecting source automatically.
-        youtube <query>   | yt                | Play a YouTube song or playlist.
-        bandcamp <url>    | bc                | Play a track from Bandcamp.
-        soundcloud <url>  | sc                | Play a track from SoundCloud.
-        spotify <url>     | sp                | Play a track from Spotify.
-        applemusic <url>  | ap                | Play a track from Apple Music.
-        stop              | None              | Stop the bot and leave the voice channel.
-        pause             | hold              | Pause the currently playing track.
-        resume            | continue          | Resume the paused track.
-        nowplaying        | np, current       | Show details of the current song.
-        seek <time/%>     | None              | Seek to a timestamp or percentage.
-        volume <0-200>    | vol               | Adjust playback volume (0-200%).
-        shuffle           | None              | Shuffle the queue.
-        """, inline=False)
-
-        embed1.add_field(name="⌚ **Queue Commands**", value="""
-        **Command**       | **Aliases**  | **Description**
-        ------------------|--------------|----------------------------------------
-        queue             | list         | Display the current queue.
-        skip              | next         | Skip the currently playing song.
-        clear             | None         | Clear the queue.
-        remove <#>        | None         | Remove a song from the queue.
-        loop              | repeat       | Toggle looping.
-        move <#> <#>      | None         | Move a song in the queue.
-        grablist <q>      | grabplaylist | Grab a user-generated playlist.
-        history           | played       | Show recently played tracks.
-        autoplay <on/off> | autodj       | Toggle autoplay mode.
-        """, inline=False)
-
-        # 🔇 Part 2: Control & Voice Commands
-        embed2 = Embed(title="📜 Bot Commands (2/3)", description="🔇 **Control & Voice Commands**", color=discord.Color.blue())
-
-        embed2.add_field(name="🔇 **Control Commands**", value="""
-        **Command**  | **Aliases** | **Description**
-        ----------|-----------|--------------------------------
-        mute      | quiet     | Toggle mute/unmute.
-        join      | come      | Make the bot join your voice channel.
-        leave     | go        | Disconnect the bot from voice.
-        """, inline=False)
-
-        embed2.add_field(name="🎤 **Voice Control Commands**", value="""
-        **Command**       | **Voice Trigger**      | **Description**
-        ------------------|------------------------|----------------------------
-        listen            | Music bot listen       | Enable voice command mode.
-        unlisten          | Music bot unlisten     | Disable voice command mode.
-        """, inline=False)
-
-        embed2.add_field(name="📜 **Lyrics Commands**", value="""
-        **Command**   | **Aliases** | **Description**
-        --------------|-------------|-------------------------------------------
-        lyrics <song> | lyr         | Fetch lyrics for the specified/current song.
-        """, inline=False)
-
-        # ⚙️ Part 3: Configuration & Admin Commands (Only shown if user is the bot owner)
-        embed3 = Embed(title="📜 Bot Commands (3/3)", description="⚙️ **Configuration & Other Commands**", color=discord.Color.blue())
-
-        embed3.add_field(name="⚙️ **Configuration Commands**", value="""
-        **Command**       | **Aliases**  | **Description**
-        ------------------|--------------|------------------------------------
-        setprefix <p>     | prefix       | Change the bot's prefix.
-        setdjrole <r>     | setrole      | Assign a DJ role.
-        setchannel <c>    | None         | Restrict bot commands to a channel.
-        """, inline=False)
-
-        embed3.add_field(name="📇 **Other Commands**", value="""
-        **Command** | **Aliases** | **Description**
-        ------------|-------------|-------------------------------------------
-        version     | ver         | DM the bot version info.
-        sendplox    | None        | DM the current track as a file.
-        commands    | cmds        | DM this command list.
-        stats       | None        | Display bot uptime, memory usage, and server count.
-        invite      | link        | Get an invite link for the bot.
-        """, inline=False)
-
-        if is_owner:
-            embed3.add_field(name="🛠️ **Admin Commands (Owner Only)**", value="""
-            **Command**  | **Aliases**        | **Description**
-            ----------|--------------|--------------------------------------
-            shutdown  | die          | Shut down the bot.
-            reboot    | restart      | Restart the bot.
-            dockboot  | dockerrestart| Restart Docker container.
-            forceplay | fplay        | Force play a song.
-            fetchlogs | logs         | Fetch the bot logs.
-            setnick   | nickname     | Change the bot's nickname.
-            """, inline=False)
-
-        # Send the command list in separate messages
-        await ctx.author.send(embed=embed1)
-        await ctx.author.send(embed=embed2)
-        await ctx.author.send(embed=embed3)
-
-        # Notify the user in the channel
-        username = ctx.message.author.mention
+        commands_text = """Available Commands:
+        
+        🎵 **Music Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        play <query>      | None           | Play a song
+        pause             | hold           | Pause the music
+        resume            | continue       | Resume the music
+        stop              | None           | Stop the bot
+        queue             | list           | Show the current queue
+        skip              | next           | Skip the current song
+        seek <time/%>     | None           | Seek to a timestamp or percentage
+        volume <0-200>    | vol            | Adjust playback volume
+        autoplay <on/off> | autodj         | Toggle autoplay mode
+        
+        ⌚ **Queue Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        clear             | None           | Clear the queue
+        remove <#>        | None           | Remove a song from the queue
+        loop              | repeat         | Toggle looping
+        shuffle           | None           | Shuffle the queue
+        move <#> <#>      | None           | Move a song in the queue
+        history           | played         | Show recently played tracks
+        
+        ⚙️ **Configuration**
+        Command            | Aliases        | Description
+        -------------------|----------------|--------------------------------
+        setprefix <p>      | prefix         | Change the bot prefix
+        setdjrole <r>      | setrole        | Assign DJ role
+        setchannel <c>     | None           | Restrict bot to a channel
+        debugmode          | None           | Toggle debug logging
+        showstats          | None           | Toggle bot stats in profile
+        
+        🛠️ **Admin Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        shutdown          | die            | Shut down the bot
+        reboot            | restart        | Restart the bot
+        backupqueue       | None           | Backup current queue
+        restorequeue      | None           | Restore a queue
+        banuser @user     | None           | Ban a user from bot
+        unbanuser @user   | None           | Unban a user
+        bannedlist        | None           | Show banned users
+        purgequeues       | None           | Clear queues across all servers
+        
+        📜 **Other Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        version           | ver            | Show bot version
+        stats             | None           | Show bot statistics
+        invite            | link           | Get bot invite link
+        sendplox          | None           | Send current track as a file
+        sendglobalmsg     | None           | Send a message to all servers
+        blacklist <song>  | None           | Block a specific song
+        whitelist <song>  | None           | Remove a song from the blacklist
+        """
+        
+        # Save commands to a file
+        with open(COMMANDS_FILE_PATH, "w") as f:
+            f.write(commands_text)
+        
+        # Send as file
         try:
-            await ctx.send(f"{username}, I've sent you a DM with the list of commands. 📬")
+            await ctx.author.send(file=discord.File(COMMANDS_FILE_PATH))
+            await ctx.send(f"{ctx.author.mention}, I've sent you the command list as a file.")
         except discord.Forbidden:
-            await ctx.send(f"{username}, I couldn't send you a DM. Please check your privacy settings.")
-
+            await ctx.send(f"{ctx.author.mention}, I couldn't send you a DM. Please check your privacy settings.")
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
@@ -1260,17 +1288,20 @@ async def lyrics(ctx, *, song: str = None):
 async def volume(ctx, volume: int):
     async with ctx.typing():
         guild_id = ctx.guild.id
+        
         if not await check_perms(ctx, guild_id):
             return
         
         if not ctx.voice_client or not ctx.voice_client.is_playing():
             await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
             return
-
+        
         if 0 <= volume <= 200:
             ctx.voice_client.source = discord.PCMVolumeTransformer(ctx.voice_client.source)
             ctx.voice_client.source.volume = volume / 100
-            await messagesender(bot, ctx.channel.id, f"Volume set to {volume}%.")
+            guild_volumes[guild_id] = volume
+            save_volume_settings(guild_volumes)
+            await messagesender(bot, ctx.channel.id, f"Volume set to {volume}% and saved.")
         else:
             await messagesender(bot, ctx.channel.id, content="Volume must be between 0 and 200.")
 
@@ -1352,11 +1383,81 @@ async def forceplay(ctx, *, query: str):
 
     video_id = await fetch_video_id(ctx, query)
     if video_id:
-        ctx.voice_client.stop()
         await queue_and_play_next(ctx, ctx.guild.id, video_id)
+        if ctx.voice_client and ctx.voice_client.is_playing():
+            ctx.voice_client.stop()
         await messagesender(bot, ctx.channel.id, content=f"Now playing `{query}` (forced).")
     else:
         await messagesender(bot, ctx.channel.id, content="Failed to find the track.")
+
+@bot.command(name="backupqueue")
+async def backup_queue(ctx, scope: str = "guild"):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if scope == "global":
+        save_queue_backup()
+        await messagesender(bot, ctx.channel.id, content="Global queue backup saved.")
+    else:
+        save_queue_backup(ctx.guild.id)
+        await messagesender(bot, ctx.channel.id, content=f"Queue backup saved for {ctx.guild.name}.")
+
+@bot.command(name="restorequeue")
+async def restore_queue(ctx, scope: str = "guild"):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if scope == "global":
+        backup_data = load_queue_backup()
+        for gid, queue_data in backup_data.items():
+            if gid not in server_queues:
+                server_queues[gid] = asyncio.Queue()
+            for item in queue_data:
+                await server_queues[gid].put(item)
+        await messagesender(bot, ctx.channel.id, content="Global queue restored.")
+    else:
+        backup_data = load_queue_backup(ctx.guild.id)
+        if ctx.guild.id not in server_queues:
+            server_queues[ctx.guild.id] = asyncio.Queue()
+        for item in backup_data.get(str(ctx.guild.id), []):
+            await server_queues[ctx.guild.id].put(item)
+        await messagesender(bot, ctx.channel.id, content=f"Queue restored for {ctx.guild.name}.")
+@bot.command(name="banuser")
+async def banuser(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    banned_users[user.id] = user.name
+    save_banned_users(banned_users)
+    await messagesender(bot, ctx.channel.id, content=f"{user.name} has been banned from using the bot.")
+
+@bot.command(name="unbanuser")
+async def unbanuser(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if user.id in banned_users:
+        del banned_users[user.id]
+        save_banned_users(banned_users)
+        await messagesender(bot, ctx.channel.id, content=f"{user.name} has been unbanned from using the bot.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"{user.name} is not banned.")
+
+@bot.command(name="bannedlist")
+async def bannedlist(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if not banned_users:
+        await messagesender(bot, ctx.channel.id, content="No users are currently banned.")
+    else:
+        banned_list = "\n".join([f"{uid}: {name}" for uid, name in banned_users.items()])
+        await messagesender(bot, ctx.channel.id, content=f"Banned Users:\n{banned_list}")
 
 @bot.command(name="fetchlogs", aliases=["logs"])
 async def fetchlogs(ctx):
@@ -1364,10 +1465,34 @@ async def fetchlogs(ctx):
         await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
         return
 
-    log_path = "/app/config/debug.log"
-    if os.path.exists(log_path):
-        await ctx.author.send(file=discord.File(log_path, filename="debug.log"))
-        await messagesender(bot, ctx.channel.id, content="Sent debug logs via DM.")
+    if not os.path.exists(LOG_FILE):
+        await messagesender(bot, ctx.channel.id, content="File not found.")
+        return
+
+    file_size = os.path.getsize(LOG_FILE)
+    if file_size > 8 * 1024 * 1024:
+        zip_path = LOG_FILE + ".zip"
+        shutil.make_archive(LOG_FILE, 'zip', root_dir=os.path.dirname(LOG_FILE), base_dir=os.path.basename(LOG_FILE))
+        zip_size = os.path.getsize(zip_path)
+        if zip_size > 8 * 1024 * 1024:
+            split_path = LOG_FILE + ".7z"
+            split_command = f'7z a -t7z -v7m "{split_path}" "{LOG_FILE}"'
+            subprocess.run(split_command, shell=True)
+            split_parts = [f for f in os.listdir(os.path.dirname(LOG_FILE)) if f.startswith(os.path.basename(split_path))]
+            for part in sorted(split_parts):
+                part_path = os.path.join(os.path.dirname(LOG_FILE), part)
+                await ctx.author.send(file=discord.File(part_path))
+                os.remove(part_path)
+        else:
+            with open(zip_path, 'rb') as file:
+                await ctx.author.typing()
+                await ctx.author.send(file=discord.File(file, filename=os.path.basename(zip_path)))
+            os.remove(zip_path) 
+    else:
+        with open(LOG_FILE, 'rb') as file:
+            await ctx.author.typing()
+            await ctx.author.send(file=discord.File(file, filename=os.path.basename(LOG_FILE)))
+            await messagesender(bot, ctx.channel.id, content="Sent debug logs via DM.")
     else:
         await messagesender(bot, ctx.channel.id, content="Log file not found.")
 
