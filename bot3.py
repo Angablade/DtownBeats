@@ -1024,120 +1024,6 @@ async def dockboot(ctx):
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
 
-
-@bot.command(name="version", aliases=["ver"])
-async def version(ctx):
-    async with ctx.typing():
-                                            #[HHMMSS-DDMMYYYY]
-        embed = discord.Embed(
-            title=f"DtownBeats - Version 0.4B [40911-02032025]",
-            description="🎵 Bringing beats to your server with style!",
-            color=discord.Color.dark_blue()
-        )
-
-        embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
-    
-        embed.add_field(name="", value=(""), inline=False)
-
-        embed.add_field(
-            name="📜 Source Code",
-            value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
-            inline=False
-        )
-
-        embed.add_field(name="", value=(""), inline=False)
-
-        embed.add_field(
-            name="🐳 Docker Image",
-            value="```\ndocker pull angablade/dtownbeats:latest```",
-            inline=False
-        )
-    
-        embed.add_field(name="", value=(""), inline=False)
-
-        embed.set_footer(
-            text=f"Created by Angablade",
-            icon_url="https://img.angablade.com/ab-w.png"
-        )
-
-        try:
-            await ctx.author.send(embed=embed)
-            await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the bot version. 📬")
-        except discord.Forbidden:
-            await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
-
-@bot.command(name="cmds", aliases=["commands"])
-async def help_command(ctx):
-    async with ctx.typing():
-        commands_text = """Available Commands:
-        
-        🎵 **Music Commands**
-        Command           | Aliases        | Description
-        ------------------|----------------|---------------------------------
-        play <query>      | None           | Play a song
-        pause             | hold           | Pause the music
-        resume            | continue       | Resume the music
-        stop              | None           | Stop the bot
-        queue             | list           | Show the current queue
-        skip              | next           | Skip the current song
-        seek <time/%>     | None           | Seek to a timestamp or percentage
-        volume <0-200>    | vol            | Adjust playback volume
-        autoplay <on/off> | autodj         | Toggle autoplay mode
-        
-        ⌚ **Queue Commands**
-        Command           | Aliases        | Description
-        ------------------|----------------|---------------------------------
-        clear             | None           | Clear the queue
-        remove <#>        | None           | Remove a song from the queue
-        loop              | repeat         | Toggle looping
-        shuffle           | None           | Shuffle the queue
-        move <#> <#>      | None           | Move a song in the queue
-        history           | played         | Show recently played tracks
-        
-        ⚙️ **Configuration**
-        Command            | Aliases        | Description
-        -------------------|----------------|--------------------------------
-        setprefix <p>      | prefix         | Change the bot prefix
-        setdjrole <r>      | setrole        | Assign DJ role
-        setchannel <c>     | None           | Restrict bot to a channel
-        debugmode          | None           | Toggle debug logging
-        showstats          | None           | Toggle bot stats in profile
-        
-        🛠️ **Admin Commands**
-        Command           | Aliases        | Description
-        ------------------|----------------|---------------------------------
-        shutdown          | die            | Shut down the bot
-        reboot            | restart        | Restart the bot
-        backupqueue       | None           | Backup current queue
-        restorequeue      | None           | Restore a queue
-        banuser @user     | None           | Ban a user from bot
-        unbanuser @user   | None           | Unban a user
-        bannedlist        | None           | Show banned users
-        purgequeues       | None           | Clear queues across all servers
-        
-        📜 **Other Commands**
-        Command           | Aliases        | Description
-        ------------------|----------------|---------------------------------
-        version           | ver            | Show bot version
-        stats             | None           | Show bot statistics
-        invite            | link           | Get bot invite link
-        sendplox          | None           | Send current track as a file
-        sendglobalmsg     | None           | Send a message to all servers
-        blacklist <song>  | None           | Block a specific song
-        whitelist <song>  | None           | Remove a song from the blacklist
-        """
-        
-        # Save commands to a file
-        with open(COMMANDS_FILE_PATH, "w") as f:
-            f.write(commands_text)
-        
-        # Send as file
-        try:
-            await ctx.author.send(file=discord.File(COMMANDS_FILE_PATH))
-            await ctx.send(f"{ctx.author.mention}, I've sent you the command list as a file.")
-        except discord.Forbidden:
-            await ctx.send(f"{ctx.author.mention}, I couldn't send you a DM. Please check your privacy settings.")
-
 @bot.command(name="seek")
 async def seek(ctx, position: str):
     async with ctx.typing():
@@ -1218,6 +1104,75 @@ async def setnick(ctx, *, nickname: str = None):
     except Exception as e:
         await messagesender(bot, ctx.channel.id, content=f"Failed to change nickname: {e}")
 
+@bot.command(name="cmds", aliases=["commands"])
+async def help_command(ctx):
+    async with ctx.typing():
+        commands_text = """Available Commands:
+        
+        🎵 **Music Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        play <query>      | None           | Play a song
+        pause             | hold           | Pause the music
+        resume            | continue       | Resume the music
+        stop              | None           | Stop the bot
+        queue             | list           | Show the current queue
+        skip              | next           | Skip the current song
+        seek <time/%>     | None           | Seek to a timestamp or percentage
+        volume <0-200>    | vol            | Adjust playback volume
+        autoplay <on/off> | autodj         | Toggle autoplay mode
+        
+        ⌚ **Queue Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        clear             | None           | Clear the queue
+        remove <#>        | None           | Remove a song from the queue
+        loop              | repeat         | Toggle looping
+        shuffle           | None           | Shuffle the queue
+        move <#> <#>      | None           | Move a song in the queue
+        history           | played         | Show recently played tracks
+        
+        ⚙️ **Configuration**
+        Command            | Aliases        | Description
+        -------------------|----------------|--------------------------------
+        setprefix <p>      | prefix         | Change the bot prefix
+        setdjrole <r>      | setrole        | Assign DJ role
+        setchannel <c>     | None           | Restrict bot to a channel
+        debugmode          | None           | Toggle debug logging
+        showstats          | None           | Toggle bot stats in profile
+        
+        🛠️ **Admin Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        shutdown          | die            | Shut down the bot
+        reboot            | restart        | Restart the bot
+        backupqueue       | None           | Backup current queue
+        restorequeue      | None           | Restore a queue
+        banuser @user     | None           | Ban a user from bot
+        unbanuser @user   | None           | Unban a user
+        bannedlist        | None           | Show banned users
+        purgequeues       | None           | Clear queues across all servers
+        
+        📜 **Other Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        version           | ver            | Show bot version
+        stats             | None           | Show bot statistics
+        invite            | link           | Get bot invite link
+        sendplox          | None           | Send current track as a file
+        sendglobalmsg     | None           | Send a message to all servers
+        blacklist <song>  | None           | Block a specific song
+        whitelist <song>  | None           | Remove a song from the blacklist
+        """
+        
+        with open(COMMANDS_FILE_PATH, "w") as f:
+            f.write(commands_text)
+     
+        try:
+            await ctx.author.send(file=discord.File(COMMANDS_FILE_PATH))
+            await ctx.send(f"{ctx.author.mention}, I've sent you the command list as a file.")
+        except discord.Forbidden:
+            await ctx.send(f"{ctx.author.mention}, I couldn't send you a DM. Please check your privacy settings.")
 
 @bot.command(name="mute", aliases=["quiet"])
 async def toggle_mute(ctx):
@@ -1496,6 +1451,46 @@ async def fetchlogs(ctx):
     else:
         await messagesender(bot, ctx.channel.id, content="Log file not found.")
 
+@bot.command(name="version", aliases=["ver"])
+async def version(ctx):
+    async with ctx.typing():
+                                            #[HHMMSS-DDMMYYYY]
+        embed = discord.Embed(
+            title=f"DtownBeats - Version 0.4D [043718-08032025]",
+            description="🎵 Bringing beats to your server with style!",
+            color=discord.Color.dark_blue()
+        )
+
+        embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
+    
+        embed.add_field(name="", value=(""), inline=False)
+
+        embed.add_field(
+            name="📜 Source Code",
+            value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
+            inline=False
+        )
+
+        embed.add_field(name="", value=(""), inline=False)
+
+        embed.add_field(
+            name="🐳 Docker Image",
+            value="```\ndocker pull angablade/dtownbeats:latest```",
+            inline=False
+        )
+    
+        embed.add_field(name="", value=(""), inline=False)
+
+        embed.set_footer(
+            text=f"Created by Angablade",
+            icon_url="https://img.angablade.com/ab-w.png"
+        )
+
+        try:
+            await ctx.author.send(embed=embed)
+            await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the bot version. 📬")
+        except discord.Forbidden:
+            await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
 
 @bot.command(name="sendplox", aliases=["dlfile"])
 async def sendmp3(ctx):
