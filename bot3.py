@@ -581,6 +581,10 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options="-bufsize 10m -ss 00:00:00")
         voice_client.play(source, after=lambda e: print(f"Playback finished: {e}") if e else None)
 
+    if guild_id in guild_volumes:
+        voice_client.source = discord.PCMVolumeTransformer(voice_client.source)
+        voice_client.source.volume = guild_volumes[guild_id] / 100
+
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(executor, playback)
 
@@ -1393,14 +1397,29 @@ async def forceplay(ctx, *, query: str):
         await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
         return
 
-    video_id = await fetch_video_id(ctx, query)
-    if video_id:
-        await queue_and_play_next(ctx, ctx.guild.id, video_id)
-        if ctx.voice_client and ctx.voice_client.is_playing():
-            ctx.voice_client.stop()
-        await messagesender(bot, ctx.channel.id, content=f"Now playing `{query}` (forced).")
-    else:
-        await messagesender(bot, ctx.channel.id, content="Failed to find the track.")
+    guild_id = ctx.guild.id
+    await messagesender(bot, ctx.channel.id, content=f"Forcing playback for: {query}")
+    await play(ctx, srch=query)
+    await asyncio.sleep(1) 
+
+    if ctx.voice_client and ctx.voice_client.is_playing():
+        print("Having to move things.")
+        queue = server_queues.get(guild_id)._queue if server_queues.get(guild_id) else None
+
+        if queue and len(queue) > 1: 
+            from_pos = len(queue) - 1
+            to_pos = 1
+            try:
+                from_pos -= 1
+                to_pos -= 1
+                track = queue[from_pos]
+                del queue[from_pos]
+                queue.insert(to_pos, track)
+            except IndexError:
+                print("Error moving track in fplay: Invalid index")
+
+        ctx.voice_client.stop()
+
 
 @bot.command(name="backupqueue")
 async def backup_queue(ctx, scope: str = "guild"):
