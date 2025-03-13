@@ -565,7 +565,11 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     )
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
-    embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown", inline=True)
+
+    try:
+        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown", inline=True)
+    except:
+        embed.add_field(name="Duration", value=f"Unknown", inline=True)
 
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
