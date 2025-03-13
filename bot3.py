@@ -269,9 +269,9 @@ async def on_voice_state_update(member, before, after):
 
         if guild_id in guild_volumes:
             try:
-                if after.channel.guild.voice_client:
-                    after.channel.guild.voice_client.source = discord.PCMVolumeTransformer(after.channel.guild.voice_client.source)
-                    after.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
+                if before.channel.guild.voice_client:
+                    before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(before.channel.guild.voice_client.source)
+                    before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
             except:
                 pass
 
