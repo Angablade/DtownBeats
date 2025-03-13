@@ -266,13 +266,10 @@ async def on_voice_state_update(member, before, after):
             return
 
         guild_id = before.channel.guild.id
-        try:
-            #if guild_id in guild_volumes:
-            #    if before.channel.guild.voice_client:
-            #        before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(before.channel.guild.voice_client.source)
-            #        before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
-        except:
-            pass
+        #if guild_id in guild_volumes:
+        #    if before.channel.guild.voice_client:
+        #        before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(before.channel.guild.voice_client.source)
+        #        before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
 
         if guild_id in bot.timeout_tasks:
             bot.timeout_tasks[guild_id].cancel()
