@@ -266,10 +266,13 @@ async def on_voice_state_update(member, before, after):
             return
 
         guild_id = before.channel.guild.id
-        #if guild_id in guild_volumes:
-        #    if before.channel.guild.voice_client:
-        #        before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(before.channel.guild.voice_client.source)
-        #        before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
+        try:
+            if guild_id in guild_volumes:
+                if before.channel.guild.voice_client:
+                    before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(before.channel.guild.voice_client.source)
+                    before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
+        except:
+            pass
 
         if guild_id in bot.timeout_tasks:
             bot.timeout_tasks[guild_id].cancel()
@@ -495,15 +498,19 @@ async def play_next(ctx, voice_client):
     async with ctx.typing():
         guild_id = ctx.guild.id
         if autoplay_enabled.get(guild_id, False) and bot.intentional_disconnections.get(guild_id, False):
+            print("Autoplay enabled. Skipping to next")
             return
 
+        print("Playing next track...")
         while not queue_paused.get(guild_id, False):
             if server_queues[guild_id].empty():
                 if autoplay_enabled.get(guild_id, False):
                     last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
-                    if last_track:
+                    if last_track: 
+                        print("Autoplaying next track...")
                         next_video = await get_related_video(last_track, guild_id)
                         if next_video:
+                            print(f"Autoplaying: {next_video}")
                             await queue_and_play_next(ctx, guild_id, next_video)
                         else:
                             await messagesender(bot, ctx.channel.id, "Autoplay stopped: No new related videos found.")
@@ -533,30 +540,24 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     if is_banned_title(video_title):
         await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
         raise ValueError("Out of bounds error: This content is not allowed.")
-        return
 
+    print(f"Playing: {video_title}")
     search_results = search_musicbrainz(video_title)
+    
     if search_results:
         track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0])
         artist = track_info.get("artist", "Unknown Artist")
         title = track_info.get("title", video_title)
-        duration = track_info.get("duration", "0")
-        if duration is None:
-            duration = await ffmpeg_get_track_length(audio_file)
-            if duration is None:
-                duration = 0
-        else:
-            duration = int(duration) // 1000
+        duration = track_info.get("duration")
+        duration = int(duration) // 1000 if duration else await ffmpeg_get_track_length(audio_file) or 0
     else:
         artist, title, duration = "Unknown Artist", video_title, 0
     
-    image_path = fetcher.get_album_art(video_title)
-
-    if not image_path:
-        image_path = "/app/albumart/default.jpg"
+    image_path = fetcher.get_album_art(video_title) or "/app/albumart/default.jpg"
 
     file = discord.File(image_path, filename="album_art.jpg")
 
+    print(f"Playing: {title} by {artist}")
     embed = discord.Embed(
         title="Now Playing",
         description=f"**{title}**",
@@ -564,28 +565,23 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     )
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
+    embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown", inline=True)
 
-    if duration == 0:
-        embed.add_field(name="Duration", value=f"Unknown", inline=True) 
-    elif duration == None:
-        embed.add_field(name="Duration", value=f"Unknown", inline=True) 
-    else:
-        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
-    
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
-    current_tracks[guild_id]["current_track"] = [video_id, video_title]
+    current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
 
     def playback():
-        source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options="-bufsize 10m -ss 00:00:00")
-        voice_client.play(source, after=lambda e: print(f"Playback finished: {e}") if e else None)
+        try:
+            print(f"Playing: {title} by {artist} in thread")
+            source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options="-bufsize 10m -ss 00:00:00")
+            volume_level = guild_volumes.get(guild_id, 100) / 100
+            source = discord.PCMVolumeTransformer(source, volume=volume_level)
+            voice_client.play(source, after=lambda e: print(f"Playback finished: {e}") if e else None)
+        except Exception as e:
+            print(f"Error during playback: {e}")
 
-    if guild_id in guild_volumes:
-        voice_client.source = discord.PCMVolumeTransformer(voice_client.source)
-        voice_client.source.volume = guild_volumes[guild_id] / 100
-
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(executor, playback)
+    await asyncio.to_thread(playback)
 
     if guild_id in bot.timeout_tasks:
         bot.timeout_tasks[guild_id].cancel()
@@ -593,14 +589,14 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(ctx))
 
     if not server_queues[guild_id].empty():
-        temp_queue = list(server_queues[guild_id]._queue)
-
-        if temp_queue:
-            next_videoinfo = temp_queue[0] 
-            next_video_id, next_video_title = next_videoinfo 
-
-            print(f"Pre-downloading next track: {next_video_title}")
-            asyncio.create_task(download_audio(next_video_id))
+        try:
+            temp_queue = list(server_queues[guild_id].queue)
+            if temp_queue:
+                next_video_id, next_video_title = temp_queue[0] 
+                print(f"Pre-downloading next track: {next_video_title}")
+                asyncio.create_task(download_audio(next_video_id))
+        except Exception as e:
+            print(f"Error pre-downloading the next track: {e}")
 
     while voice_client.is_playing():
         await asyncio.sleep(1)
