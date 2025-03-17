@@ -873,7 +873,6 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
     except Exception as e:
         await messagesender(bot, ctx.channel.id, f"Error adding to queue: {e}")
 
-
 @bot.command(name="skip", aliases=["next"])
 async def skip(ctx):
     async with ctx.typing():
@@ -1057,7 +1056,6 @@ async def nowplaying(ctx):
         embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
 
         await messagesender(bot, ctx.channel.id, embed=embed, file=file)
-
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):

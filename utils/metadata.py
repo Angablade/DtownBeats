@@ -3,52 +3,57 @@ import json
 import musicbrainzngs
 
 class MetadataManager:
-    def __init__(self, cache_dir, editor_file, USERAGENT, CON_VERSION, CONTACT):
+    def __init__(self, cache_dir, editors_file, useragent, version, contact):
         self.cache_dir = cache_dir
-        self.editor_file = editor_file
+        self.editors_file = editors_file
         self.editor_ids = self.load_editors()
+        musicbrainzngs.set_useragent(useragent, version, contact)
         os.makedirs(cache_dir, exist_ok=True)
-        musicbrainzngs.set_useragent(USERAGENT, CON_VERSION, CONTACT)
 
-    def _get_metadata_path(self, filename):
-        base, _ = os.path.splitext(filename)
-        return os.path.join(self.cache_dir, f"{base}.json")
+    def load_editors(self):
+        if os.path.exists(self.editors_file):
+            with open(self.editors_file, 'r') as f:
+                return json.load(f).get("editors", [])
+        return []
+
+    def save_editors(self):
+        with open(self.editors_file, 'w') as f:
+            json.dump({"editors": self.editor_ids}, f, indent=4)
+
+    def add_editor(self, user_id):
+        if user_id not in self.editor_ids:
+            self.editor_ids.append(user_id)
+            self.save_editors()
+
+    def remove_editor(self, user_id):
+        if user_id in self.editor_ids:
+            self.editor_ids.remove(user_id)
+            self.save_editors()
+
+    def get_metadata_path(self, filename):
+        return os.path.join(self.cache_dir, f"{filename}.json")
 
     def load_metadata(self, filename):
-        metadata_path = self._get_metadata_path(filename)
+        metadata_path = self.get_metadata_path(filename)
         if os.path.exists(metadata_path):
-            with open(metadata_path, "r") as f:
+            with open(metadata_path, 'r') as f:
                 return json.load(f)
         return None
 
     def save_metadata(self, filename, metadata):
-        metadata_path = self._get_metadata_path(filename)
-        with open(metadata_path, "w") as f:
+        metadata_path = self.get_metadata_path(filename)
+        with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=4)
 
     def fetch_metadata(self, query):
-        print(f"Fetching metadata for {query}")
-        try:
-            result = musicbrainzngs.search_recordings(query, limit=5)
-            if "recording-list" in result:
-                recordings = result["recording-list"]
-                refined_results = []
-                for recording in recordings:
-                    artist = recording["artist-credit"][0]["artist"]["name"]
-                    title = recording["title"]
-                    album = recording["release-list"][0]["title"] if "release-list" in track else "Unknown"
-                    duration = recording.get("length")
-                    refined_results.append({
-                        "artist": artist,
-                        "title": title,
-                        "album": album,
-                        "duration": duration,
-                        "image_path": None
-                    })
-                return refined_results
-        except Exception as e:
-            print(f"Error fetching metadata: {e}")
-        return {"title": title, "artist": artist or "Unknown", "album": "Unknown", "duration": 0, "image_path": None}
+        result = musicbrainzngs.search_recordings(query=query, limit=1)
+        if result["recording-list"]:
+            recording = result["recording-list"][0]
+            artist = recording["artist-credit"][0]["artist"]["name"]
+            title = recording["title"]
+            duration = int(recording.get("length", 0)) // 1000
+            return {"artist": artist, "title": title, "duration": duration}
+        return {"artist": "Unknown Artist", "title": query, "duration": "Unknown"}
 
     def get_or_fetch_metadata(self, filename, query):
         metadata = self.load_metadata(filename)
@@ -58,24 +63,7 @@ class MetadataManager:
         return metadata
 
     def update_metadata(self, filename, key, value):
-        metadata = self.load_metadata(filename) or {}
-        metadata[key] = value
-        self.save_metadata(filename, metadata)
-    
-    def load_editors(self):
-        if os.path.exists(self.editor_file):
-            with open(self.editor_file, "r") as f:
-                return set(json.load(f))
-        return set()
-
-    def save_editors(self):
-        with open(self.editor_file, "w") as f:
-            json.dump(list(self.editor_ids), f, indent=4)
-    
-    def add_editor(self, user_id):
-        self.editor_ids.add(user_id)
-        self.save_editors()
-    
-    def remove_editor(self, user_id):
-        self.editor_ids.discard(user_id)
-        self.save_editors()
+        metadata = self.load_metadata(filename)
+        if metadata:
+            metadata[key] = value
+            self.save_metadata(filename, metadata)
