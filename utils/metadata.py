@@ -26,18 +26,26 @@ class MetadataManager:
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=4)
 
-    def fetch_metadata(self, title, artist=None):
+    def fetch_metadata(self, query):
+        print(f"Fetching metadata for {query}")
         try:
-            result = musicbrainzngs.search_recordings(recording=title, artist=artist, limit=1)
-            if result["recording-list"]:
-                track = result["recording-list"][0]
-                return {
-                    "title": track.get("title", title),
-                    "artist": track["artist-credit"][0]["artist"]["name"] if "artist-credit" in track else "Unknown",
-                    "album": track["release-list"][0]["title"] if "release-list" in track else "Unknown",
-                    "duration": int(track.get("length", 0)) // 1000,
+            result = musicbrainzngs.search_recordings(query, limit=5)
+            if "recording-list" in result:
+            recordings = result["recording-list"]
+            refined_results = []
+            for recording in recordings:
+                artist = recording["artist-credit"][0]["artist"]["name"]
+                title = recording["title"]
+                album = recording["release-list"][0]["title"] if "release-list" in track else "Unknown"
+                duration = recording.get("length")
+                refined_results.append({
+                    "artist": artist,
+                    "title": title,
+                    "album": album,
+                    "duration": duration,
                     "image_path": None
-                }
+                })
+            return refined_results
         except Exception as e:
             print(f"Error fetching metadata: {e}")
         return {"title": title, "artist": artist or "Unknown", "album": "Unknown", "duration": 0, "image_path": None}
