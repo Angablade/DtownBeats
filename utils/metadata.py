@@ -31,21 +31,21 @@ class MetadataManager:
         try:
             result = musicbrainzngs.search_recordings(query, limit=5)
             if "recording-list" in result:
-            recordings = result["recording-list"]
-            refined_results = []
-            for recording in recordings:
-                artist = recording["artist-credit"][0]["artist"]["name"]
-                title = recording["title"]
-                album = recording["release-list"][0]["title"] if "release-list" in track else "Unknown"
-                duration = recording.get("length")
-                refined_results.append({
-                    "artist": artist,
-                    "title": title,
-                    "album": album,
-                    "duration": duration,
-                    "image_path": None
-                })
-            return refined_results
+                recordings = result["recording-list"]
+                refined_results = []
+                for recording in recordings:
+                    artist = recording["artist-credit"][0]["artist"]["name"]
+                    title = recording["title"]
+                    album = recording["release-list"][0]["title"] if "release-list" in track else "Unknown"
+                    duration = recording.get("length")
+                    refined_results.append({
+                        "artist": artist,
+                        "title": title,
+                        "album": album,
+                        "duration": duration,
+                        "image_path": None
+                    })
+                return refined_results
         except Exception as e:
             print(f"Error fetching metadata: {e}")
         return {"title": title, "artist": artist or "Unknown", "album": "Unknown", "duration": 0, "image_path": None}
