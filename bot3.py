@@ -222,7 +222,7 @@ banned_users = load_banned_users()
 stats_config = load_stats_config()
 blacklist_data = load_blacklist()
 debug_config = load_debug_mode()
-metadata_manager = MetadataManager("metacache","config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
+metadata_manager = MetadataManager("/app/metacache","config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 
 @bot.event
 async def on_message(message):
