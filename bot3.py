@@ -2074,8 +2074,8 @@ async def get_metadata(ctx, filename: str):
         await ctx.send("No metadata found.")
 
 @bot.command(name="fetchmetadata")
-async def fetch_metadata(ctx, filename: str, title: str, artist: str = None):
-    metadata = metadata_manager.get_or_fetch_metadata(filename, title, artist)
+async def fetch_metadata(ctx, filename: str, query: str):
+    metadata = metadata_manager.get_or_fetch_metadata(filename, query)
     await ctx.send(f"Fetched metadata:\n```json\n{json.dumps(metadata, indent=4)}```")
 
 @bot.command(name="setmetadata")

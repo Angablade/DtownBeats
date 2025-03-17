@@ -50,10 +50,10 @@ class MetadataManager:
             print(f"Error fetching metadata: {e}")
         return {"title": title, "artist": artist or "Unknown", "album": "Unknown", "duration": 0, "image_path": None}
 
-    def get_or_fetch_metadata(self, filename, title, artist=None):
+    def get_or_fetch_metadata(self, filename, query):
         metadata = self.load_metadata(filename)
         if not metadata:
-            metadata = self.fetch_metadata(title, artist)
+            metadata = self.fetch_metadata(query)
             self.save_metadata(filename, metadata)
         return metadata
 
