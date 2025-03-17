@@ -11,7 +11,7 @@ pip install --no-cache-dir "pybind11>=2.12" "numpy<2" py-cord pyyaml requests yt
     musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein spotdl stt
 
 # Ensure necessary directories exist
-for dir in /app/{lyrics,music,config,models,sources,utils,albumart}; do
+for dir in /app/{lyrics,music,config,models,sources,utils,albumart,metacache}; do
     mkdir -p "$dir" && chmod 777 "$dir"
 done
 
@@ -24,6 +24,7 @@ FILES=(
     "bot3.py" "utils/lyrics.py" "utils/youtube_pl.py" "utils/voice_utils.py"
     "sources/youtube_mp3.py" "sources/spotify_mp3.py" "sources/soundcloud_mp3.py"
     "sources/bandcamp_mp3.py" "sources/apple_music_mp3.py" "utils/albumart.py"
+    "utils/metadata.py"
 )
 
 # Function to download files with fallback

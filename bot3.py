@@ -22,6 +22,7 @@ from utils.voice_utils import start_listening, stop_listening
 from utils.youtube_pl import grab_youtube_pl
 from utils.lyrics import Lyrics
 from utils.albumart import AlbumArtFetcher
+from utils.metadata import MetadataManager
 
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
@@ -214,12 +215,14 @@ queue_paused = {}
 track_history = {}
 autoplay_enabled = {}
 message_map = {}
+last_active_channels = {} 
+
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
 stats_config = load_stats_config()
 blacklist_data = load_blacklist()
 debug_config = load_debug_mode()
-last_active_channels = {} 
+metadata_manager = MetadataManager("metacache","config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 
 @bot.event
 async def on_message(message):
@@ -542,17 +545,15 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         raise ValueError("Out of bounds error: This content is not allowed.")
 
     print(f"Playing: {video_title}")
-    search_results = search_musicbrainz(video_title)
-    
-    if search_results:
-        track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0])
-        artist = track_info.get("artist", "Unknown Artist")
-        title = track_info.get("title", video_title)
-        duration = track_info.get("duration")
-        duration = int(duration) // 1000 if duration else await ffmpeg_get_track_length(audio_file) or 0
-    else:
-        artist, title, duration = "Unknown Artist", video_title, 0
-    
+    metadata = metadata_manager.load_metadata(video_id)
+    if not metadata:
+        metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
+        metadata_manager.save_metadata(video_id, metadata)
+
+    artist = metadata["artist"]
+    title = metadata["title"]
+    duration = metadata.get("duration", "Unknown")
+
     image_path = fetcher.get_album_art(video_title) or "/app/albumart/default.jpg"
 
     file = discord.File(image_path, filename="album_art.jpg")
@@ -565,11 +566,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     )
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
-
-    try:
-        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration else "Unknown", inline=True)
-    except:
-        embed.add_field(name="Duration", value=f"Unknown", inline=True)
+    embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
 
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
@@ -596,7 +593,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         try:
             temp_queue = list(server_queues[guild_id].queue)
             if temp_queue:
-                next_video_id, next_video_title = temp_queue[0] 
+                next_video_id, next_video_title = temp_queue[0]
                 print(f"Pre-downloading next track: {next_video_title}")
                 asyncio.create_task(download_audio(next_video_id))
         except Exception as e:
@@ -847,15 +844,18 @@ async def fetch_video_id_from_ytsearch(search: str, ctx):
 
 async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
     try:
-        if title == None:
+        if title is None:
             video_title = await get_youtube_video_title(video_id)
             if not video_title:
                 await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
                 return
         else:
-            print("Dealing with not youtube here!")
             video_title = title
             video_id = f"|{video_id}"
+
+        # Fetch and cache metadata
+        metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
+        metadata_manager.save_metadata(video_id, metadata)
 
         await server_queues[guild_id].put([video_id, video_title])
         await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
@@ -872,6 +872,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
 
     except Exception as e:
         await messagesender(bot, ctx.channel.id, f"Error adding to queue: {e}")
+
 
 @bot.command(name="skip", aliases=["next"])
 async def skip(ctx):
@@ -1017,7 +1018,7 @@ async def loop(ctx):
         current_tracks[guild_id]["is_looping"] = not current_tracks[guild_id].get("is_looping", False)
         await messagesender(bot, ctx.channel.id, content="Looping " + ("enabled." if current_tracks[guild_id]["is_looping"] else "disabled."))
 
-@bot.command(name="nowplaying", aliases=["current","np"])
+@bot.command(name="nowplaying", aliases=["current", "np"])
 async def nowplaying(ctx):
     async with ctx.typing():
         guild_id = ctx.guild.id
@@ -1029,17 +1030,18 @@ async def nowplaying(ctx):
             await messagesender(bot, ctx.channel.id, content="No track is currently playing.")
             return
 
-        video_title = current_track[1]
-        search_results = search_musicbrainz(video_title)
-        if search_results:
-            track_info = next((track for track in search_results if "8-Bit" not in track.get("title", "") and "8-Bit" not in track.get("artist", "")), search_results[0])
-            artist = track_info.get("artist", "Unknown Artist")
-            title = track_info.get("title", video_title)
-            duration = int(track_info.get("duration", 0)) // 1000
-        else:
-            artist, title, duration = "Unknown Artist", video_title, 0
-    
-        image_path = fetcher.get_album_art(video_title)
+        video_id = current_track[0]
+        metadata = metadata_manager.load_metadata(video_id)
+        if not metadata:
+            video_title = current_track[1]
+            metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
+            metadata_manager.save_metadata(video_id, metadata)
+
+        artist = metadata["artist"]
+        title = metadata["title"]
+        duration = metadata.get("duration", "Unknown")
+
+        image_path = fetcher.get_album_art(title)
         if not image_path:
             image_path = "/app/albumart/default.jpg"
 
@@ -1052,9 +1054,10 @@ async def nowplaying(ctx):
         )
         embed.set_thumbnail(url="attachment://album_art.jpg")
         embed.add_field(name="Artist", value=artist, inline=True)
-        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}", inline=True)
-    
+        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+
         await messagesender(bot, ctx.channel.id, embed=embed, file=file)
+
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):
@@ -2034,28 +2037,6 @@ async def timeout_handler(ctx):
         await ctx.voice_client.disconnect()
         print(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
 
-def search_musicbrainz(query):
-    """Search MusicBrainz for refined track info."""
-    try:
-        result = musicbrainzngs.search_recordings(query, limit=5)
-        if "recording-list" in result:
-            recordings = result["recording-list"]
-            refined_results = []
-            for recording in recordings:
-                artist = recording["artist-credit"][0]["artist"]["name"]
-                title = recording["title"]
-                duration = recording.get("length")
-                refined_results.append({
-                    "artist": artist,
-                    "title": title,
-                    "duration": duration
-                })
-            return refined_results
-        return None
-    except musicbrainzngs.ResponseError as e:
-        print(f"MusicBrainz API error: {e}")
-        return None
-
 async def update_bot_presence():
     """ Updates the bot's presence based on the stats setting. """
     if stats_config["show_stats"]:
@@ -2083,6 +2064,43 @@ async def listen_command(ctx):
 @bot.command(name="unlisten")
 async def unlisten_command(ctx):
     await stop_listening(ctx)
+
+@bot.command(name="getmetadata")
+async def get_metadata(ctx, filename: str):
+    metadata = metadata_manager.load_metadata(filename)
+    if metadata:
+        await ctx.send(f"Metadata for {filename}:\n```json\n{json.dumps(metadata, indent=4)}```")
+    else:
+        await ctx.send("No metadata found.")
+
+@bot.command(name="fetchmetadata")
+async def fetch_metadata(ctx, filename: str, title: str, artist: str = None):
+    metadata = metadata_manager.get_or_fetch_metadata(filename, title, artist)
+    await ctx.send(f"Fetched metadata:\n```json\n{json.dumps(metadata, indent=4)}```")
+
+@bot.command(name="setmetadata")
+async def set_metadata(ctx, filename: str, key: str, value: str):
+    if ctx.author.id not in metadata_manager.editor_ids:
+        await ctx.send("You do not have permission to edit metadata.")
+        return
+    metadata_manager.update_metadata(filename, key, value)
+    await ctx.send(f"Updated {key} in {filename}.")
+
+@bot.command(name="addeditor")
+async def add_editor(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("You do not have permission to modify editors.")
+        return
+    metadata_manager.add_editor(user.id)
+    await ctx.send(f"Added {user.mention} as a metadata editor.")
+
+@bot.command(name="removeeditor")
+async def remove_editor(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("You do not have permission to modify editors.")
+        return
+    metadata_manager.remove_editor(user.id)
+    await ctx.send(f"Removed {user.mention} from metadata editors.")
 
 
 bot.run(BOT_TOKEN)
