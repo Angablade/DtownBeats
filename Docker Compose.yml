@@ -10,6 +10,7 @@ services:
       - /path/to/config:/app/config
       - /path/to/models:/app/models
       - /path/to/albumart:/app/albumart
+      - /path/to/metacache:/app/metacache
     environment:
       - MUSICBRAINZ_USERAGENT="dtownbeats"
       - MUSICBRAINZ_VERSION="1.1"
