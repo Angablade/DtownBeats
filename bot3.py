@@ -1,4 +1,5 @@
 import discord
+import discord
 import os
 import re
 import sys
@@ -559,11 +560,11 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
     try:
-        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+        embed.add_field(name="Duration", value=f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
     except:
         try:
-            duration = metadata_manager.ffmpeg_get_track_length(audio_file)
-            embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+            duration = int(metadata_manager.ffmpeg_get_track_length(audio_file))
+            embed.add_field(name="Duration", value=f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
         except:
             Embed.add_field(name="Duration", value="Unknown", inline=True)
     embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
