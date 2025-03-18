@@ -70,7 +70,7 @@ class MetadataManager:
             metadata[key] = value
             self.save_metadata(filename, metadata)
 
-    def ffmpeg_get_track_length(path):
+    def ffmpeg_get_track_length(self, path):
         try:
             result = subprocess.run(
                 ["ffmpeg", "-i", path, "-f", "null", "-"],
