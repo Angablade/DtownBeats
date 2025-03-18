@@ -1,6 +1,8 @@
 import os
 import json
 import musicbrainzngs
+import ffmpeg
+import subprocess
 
 class MetadataManager:
     def __init__(self, cache_dir, editors_file, useragent, version, contact):
@@ -67,3 +69,19 @@ class MetadataManager:
         if metadata:
             metadata[key] = value
             self.save_metadata(filename, metadata)
+
+    def ffmpeg_get_track_length(path):
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-i", path, "-f", "null", "-"],
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            duration_line = [line for line in result.stderr.split("\n") if "Duration" in line]
+            if duration_line:
+                time_str = duration_line[0].split(",")[0].split("Duration:")[1].strip()
+                h, m, s = map(float, time_str.split(":"))
+                return int(h * 3600 + m * 60 + s)
+        except Exception as e:
+            print(f"Error getting duration: {e}")
+        return None
