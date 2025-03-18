@@ -567,6 +567,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
     embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+    embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
 
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
@@ -1054,6 +1055,7 @@ async def nowplaying(ctx):
         embed.set_thumbnail(url="attachment://album_art.jpg")
         embed.add_field(name="Artist", value=artist, inline=True)
         embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+        embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
 
         await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
@@ -1531,7 +1533,7 @@ async def version(ctx):
     async with ctx.typing():
                                             #[HHMMSS-DDMMYYYY]
         embed = discord.Embed(
-            title=f"DtownBeats - Version 0.4E [173344-08032025]",
+            title=f"DtownBeats - Version 0.4F [222333-17032025]",
             description="🎵 Bringing beats to your server with style!",
             color=discord.Color.dark_blue()
         )
