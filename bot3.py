@@ -445,14 +445,6 @@ async def check_empty_channel(ctx):
             return
         await ctx.voice_client.disconnect()
 
-async def ffmpeg_get_track_length(path):
-    try:
-        metadata = ffmpeg.probe(path)
-        duration = float(metadata['format']['duration'])
-        return duration
-    except ffmpeg.Error as e:
-        return None
-
 async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
     startermessage = f"Fetching playlist: ({playlist_id})\n"
     progress_message = await ctx.send(startermessage)
@@ -566,7 +558,14 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     )
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
-    embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+    try:
+        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+    except:
+        try:
+            duration = metadata_manager.ffmpeg_get_track_length(audio_file)
+            embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+        except:
+            Embed.add_field(name="Duration", value="Unknown", inline=True)
     embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
 
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
@@ -1054,7 +1053,14 @@ async def nowplaying(ctx):
         )
         embed.set_thumbnail(url="attachment://album_art.jpg")
         embed.add_field(name="Artist", value=artist, inline=True)
-        embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+        try:
+            embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+        except:
+            try:
+                duration = metadata_manager.ffmpeg_get_track_length(audio_file)
+                embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+            except:
+                Embed.add_field(name="Duration", value="Unknown", inline=True)
         embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
 
         await messagesender(bot, ctx.channel.id, embed=embed, file=file)
