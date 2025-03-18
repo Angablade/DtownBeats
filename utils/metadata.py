@@ -2,6 +2,7 @@ import os
 import json
 import musicbrainzngs
 import ffmpeg
+import subprocess
 
 class MetadataManager:
     def __init__(self, cache_dir, editors_file, useragent, version, contact):
