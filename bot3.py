@@ -2075,6 +2075,9 @@ async def get_metadata(ctx, filename: str):
 
 @bot.command(name="fetchmetadata")
 async def fetch_metadata(ctx, filename: str, query: str):
+    if ctx.author.id not in metadata_manager.editor_ids:
+        await ctx.send("You do not have permission to edit metadata.")
+        return
     metadata = metadata_manager.get_or_fetch_metadata(filename, query)
     await ctx.send(f"Fetched metadata:\n```json\n{json.dumps(metadata, indent=4)}```")
 
