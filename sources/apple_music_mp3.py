@@ -32,7 +32,6 @@ class AppleMusicScraper:
     async def extract_youtube_link(self, data, ctx):
         try:
             youtube_id = data["linksByPlatform"].get("youtube").get("entityUniqueId").split(':')[-1]
-            await ctx.send(youtube_id)
             return youtube_id
         except KeyError as e:
             await ctx.send("Error extracting youtube link")
