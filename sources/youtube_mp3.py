@@ -2,6 +2,7 @@ import asyncio
 import re
 import os
 import yt_dlp
+import logging
 
 class YouTubeAudioStreamer:
 
@@ -21,10 +22,10 @@ class YouTubeAudioStreamer:
         mp3_file_path = f"music/{self.video_id}.mp3"
 
         if os.path.exists(opus_file_path):
-            print(f"File already cached: {opus_file_path}")
+            logging.error(f"File already cached: {opus_file_path}")
             return opus_file_path
         if os.path.exists(mp3_file_path):
-            print(f"File already cached: {mp3_file_path}")
+            logging.error(f"File already cached: {mp3_file_path}")
             return mp3_file_path
 
         # Try downloading Opus 774 first from YouTube Music
@@ -58,7 +59,7 @@ class YouTubeAudioStreamer:
             await loop.run_in_executor(None, self._download_sync, ydl_opts, url)
             return os.path.exists(output_path)
         except Exception as e:
-            print(f"Error downloading {codec} format from {url}: {e}")
+            logging.error(f"Error downloading {codec} format from {url}: {e}")
             return False
 
     def _download_sync(self, ydl_opts, url):

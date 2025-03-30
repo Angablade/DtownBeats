@@ -2,6 +2,7 @@ import os
 import re
 import requests
 from bs4 import BeautifulSoup
+import logging
 
 YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/search?q={query}"
 YOUTUBE_MUSIC_BASE_URL = "https://music.youtube.com"
@@ -63,7 +64,7 @@ class Lyrics:
     ### Lyrics.ovh ###
     def get_lyrics_from_lyrics_ovh(self, artist, song):
         """Get lyrics from Lyrics.ovh API."""
-        print("Trying Lyrics.ovh...")
+        logging.error("Trying Lyrics.ovh...")
         url = LYRICS_OVH_URL.format(artist=artist, song=song)
         response = requests.get(url, headers=HEADERS)
         if response.status_code == 200:
@@ -74,7 +75,7 @@ class Lyrics:
     ### Genius ###
     def search_genius(self, artist, song):
         """Search for song lyrics on Genius and return top hit if it matches."""
-        print("Trying Genius...")
+        logging.error("Trying Genius...")
         query = f"{artist} {song}".replace(" ", "%20")
         search_url = GENIUS_SEARCH_URL.format(query=query)
 
@@ -112,7 +113,7 @@ class Lyrics:
     ### YouTube Music ###
     def search_youtube_music(self, artist, song):
         """Search YouTube Music for the song and return the first video link."""
-        print("Trying YouTube Music...")
+        logging.error("Trying YouTube Music...")
         query = f"{artist} {song}".replace(" ", "+")
         search_url = YOUTUBE_MUSIC_SEARCH_URL.format(query=query)
 
@@ -145,7 +146,7 @@ class Lyrics:
     ### AZLyrics (Last Option) ###
     def get_lyrics_from_azlyrics(self, artist, song):
         """Scrape lyrics from AZLyrics."""
-        print("Trying AZLyrics...")
+        logging.error("Trying AZLyrics...")
         artist_cleaned = re.sub(r'[\W_]+', '', artist).lower()
         song_cleaned = re.sub(r'[\W_]+', '', song).lower()
         url = f"https://www.azlyrics.com/lyrics/{artist_cleaned}/{song_cleaned}.html"

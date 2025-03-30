@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 import json
 from discord import Embed
+import logging
 
 class AppleMusicScraper:
     def __init__(self, url, ctx):
@@ -26,7 +27,7 @@ class AppleMusicScraper:
                     return await self.extract_youtube_link(data, ctx)
         except Exception as e:
             error_message = f"Error fetching metadata: {e}"
-            print(error_message)
+            logging.error(error_message)
             return None
 
     async def extract_youtube_link(self, data, ctx):

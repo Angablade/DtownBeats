@@ -3,6 +3,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 import json
+import logging
 
 SPOTIFY_TRACK_REGEX = r'https?://open\.spotify\.com/track/[\w]+'
 
@@ -25,7 +26,7 @@ async def spotify_to_youtube(url: str):
         raise ValueError("Invalid Spotify URL")
     query = await get_spotify_title(url)
     if not query:
-        print("❌ Failed to fetch Spotify title.")
+        logging.error("❌ Failed to fetch Spotify title.")
         return None
     search_url = f"https://music.youtube.com/search?q={query.replace(' ', '+')}"
     try:
@@ -36,11 +37,11 @@ async def spotify_to_youtube(url: str):
         contents = response.text.split(",")
         for item in contents:
             if "videoId" in item:
-                print(item)
+                logging.error(item)
                 videoid = item.split(":")[-1][4:][:-4]
                 return videoid
     except requests.RequestException as e:
-        print(f"❌ Error fetching YouTube search results: {e}")
+        logging.error(f"❌ Error fetching YouTube search results: {e}")
         return None
 
 async def get_spotify_tracks_from_playlist(url):
@@ -52,7 +53,7 @@ async def get_spotify_tracks_from_playlist(url):
         response.raise_for_status()
         return list(set(re.findall(r'https://open\.spotify\.com/track/[\w]+', response.text)))
     except requests.RequestException as e:
-        print(f"Error fetching playlist: {e}")
+        logging.error(f"Error fetching playlist: {e}")
         return []
 
 async def get_spotify_title(url):

@@ -100,12 +100,12 @@ def save_config(config):
 
 def get_server_config(guild_id):
     config = load_config()
-    return config.get(str(guild_id), {"prefix": "!", "dj_role": None, "channel": None})
+    return config.get(str(guild_id), {"prefix": "!", "dj_role": None, "channel": None, "autoplay": False})
 
 def update_server_config(guild_id, key, value):
     config = load_config()
     if str(guild_id) not in config:
-        config[str(guild_id)] = {"prefix": "!", "dj_role": None, "channel": None}
+        config[str(guild_id)] = {"prefix": "!", "dj_role": None, "channel": None, "autoplay": False}
     config[str(guild_id)][key] = value
     save_config(config)
 
@@ -134,8 +134,8 @@ def save_queue_backup(guild_id=None):
     try:
         if not server_queues.get(guild_id):
             server_queues[guild_id] = asyncio.Queue()
-    except:
-        print("No Queues initalized. Failed to save queue backup.")
+    except Exception as e:
+        logging.error("No Queues initalized. Failed to save queue backup.")
 
     backup_path = get_backup_path(guild_id)
     backup_data = {}
@@ -153,8 +153,8 @@ def load_queue_backup(guild_id=None):
     try:
         if not server_queues.get(guild_id):
             server_queues[guild_id] = asyncio.Queue()
-    except:
-        print("No Queues initalized. Failed to load queue backup.")
+    except Exception as e:
+        logging.error("No Queues initalized. Failed to load queue backup.")
 
     backup_path = get_backup_path(guild_id)
     if os.path.exists(backup_path):
@@ -239,10 +239,10 @@ async def on_message(message):
 async def download_audio(video_id):
     try: 
          filenam = await get_audio_filename(video_id)
-         print(f"{filenam} is playing...")
+         logging.error(f"{filenam} is playing...")
          return filenam
     except Exception as e:
-        print(f"Failed to download audio: {e}")
+        logging.error(f"Failed to download audio: {e}")
         return None
 
 async def check_perms(ctx, guild_id):
@@ -280,7 +280,7 @@ async def on_voice_state_update(member, before, after):
                 if before.channel.guild.voice_client:
                     before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(before.channel.guild.voice_client.source)
                     before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
-        except:
+        except Exception as e:
             pass
 
         if guild_id in bot.timeout_tasks:
@@ -296,16 +296,16 @@ async def on_voice_state_update(member, before, after):
                 intentional_disconnection = False
 
             if not intentional_disconnection:
-                print("Bot got disconnected from voice channel. Attempting to reconnect...")
+                logging.error("Bot got disconnected from voice channel. Attempting to reconnect...")
                 await asyncio.sleep(5)
                 guild = before.channel.guild
                 voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
                 if voice_channel:
                     try:
                         await voice_channel.connect()
-                        print("Reconnected to voice channel successfully.")
+                        logging.error("Reconnected to voice channel successfully.")
                     except Exception as e:
-                        print(f"Failed to reconnect: {e}")
+                        logging.error(f"Failed to reconnect: {e}")
             else:
                 bot.intentional_disconnections[guild_id] = False
     await asyncio.sleep(1)
@@ -315,7 +315,7 @@ async def on_voice_state_update(member, before, after):
 async def on_guild_join(guild):
     if guild.id not in server_queues:
         server_queues[guild.id] = asyncio.Queue()
-    print(f"Joined new guild: {guild.name}, initialized queue.")
+    logging.error(f"Joined new guild: {guild.name}, initialized queue.")
 
 async def get_related_video(video_id, guild_id, retry_count=3):
     url = f"https://www.youtube.com/watch?v={video_id}"
@@ -343,10 +343,10 @@ async def get_related_video(video_id, guild_id, retry_count=3):
                     if video_title and not is_duplicate(related_id, video_title):
                         return related_id
 
-                print(f"Retry {attempt + 1}/{retry_count}: No new videos found. Reloading page...")
+                logging.error(f"Retry {attempt + 1}/{retry_count}: No new videos found. Reloading page...")
                 await asyncio.sleep(2)
 
-    print("Failed to find a new related video after 3 attempts. Stopping playback.")
+    logging.error("Failed to find a new related video after 3 attempts. Stopping playback.")
     return None
 
 
@@ -377,7 +377,7 @@ def is_banned_title(title):
 async def messagesender(bot, channel_id, content=None, embed=None, command_message=None, file=None):
     channel = bot.get_channel(channel_id)
     if not channel:
-        print(f"[Error] Channel with ID {channel_id} not found.")
+        logging.error(f"[Error] Channel with ID {channel_id} not found.")
         return
     
     messages = []
@@ -387,7 +387,7 @@ async def messagesender(bot, channel_id, content=None, embed=None, command_messa
         try:
             file = discord.File(file)
         except Exception as e:
-            print(f"[Error] Failed to create discord.File: {e}")
+            logging.error(f"[Error] Failed to create discord.File: {e}")
             return
 
     async with channel.typing():
@@ -404,7 +404,7 @@ async def messagesender(bot, channel_id, content=None, embed=None, command_messa
             elif content:
                 # Ensure content is a string before attempting to split
                 if not isinstance(content, str):
-                    print("[Error] Content must be a string.")
+                    logging.error("[Error] Content must be a string.")
                     return
 
                 while content:
@@ -425,10 +425,10 @@ async def messagesender(bot, channel_id, content=None, embed=None, command_messa
             elif file:
                 messages.append(await channel.send(file=file))
             else:
-                print("[Error] Either 'content', 'embed', or 'file' must be provided.")
+                logging.error("[Error] Either 'content', 'embed', or 'file' must be provided.")
                 return
         except discord.HTTPException as e:
-            print(f"[Error] Failed to send message: {e}")
+            logging.error(f"[Error] Failed to send message: {e}")
             return
 
     if command_message:
@@ -499,19 +499,19 @@ async def play_next(ctx, voice_client):
     async with ctx.typing():
         guild_id = ctx.guild.id
         if autoplay_enabled.get(guild_id, False) and bot.intentional_disconnections.get(guild_id, False):
-            print("Autoplay enabled. Skipping to next")
+            logging.error("Autoplay enabled. Skipping to next")
             return
 
-        print("Playing next track...")
+        logging.error("Playing next track...")
         while not queue_paused.get(guild_id, False):
             if server_queues[guild_id].empty():
                 if autoplay_enabled.get(guild_id, False):
                     last_track = track_history.get(guild_id, [])[-1][0] if track_history.get(guild_id) else None
                     if last_track: 
-                        print("Autoplaying next track...")
+                        logging.error("Autoplaying next track...")
                         next_video = await get_related_video(last_track, guild_id)
                         if next_video:
-                            print(f"Autoplaying: {next_video}")
+                            logging.error(f"Autoplaying: {next_video}")
                             await queue_and_play_next(ctx, guild_id, next_video)
                         else:
                             await messagesender(bot, ctx.channel.id, "Autoplay stopped: No new related videos found.")
@@ -542,7 +542,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
         await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
         raise ValueError("Out of bounds error: This content is not allowed.")
 
-    print(f"Playing: {video_title}")
+    logging.error(f"Playing: {video_title}")
     metadata = metadata_manager.load_metadata(video_id)
     if not metadata:
         metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
@@ -556,7 +556,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     file = discord.File(image_path, filename="album_art.jpg")
 
-    print(f"Playing: {title} by {artist}")
+    logging.error(f"Playing: {title} by {artist}")
     embed = discord.Embed(
         title="Now Playing",
         description=f"**{title}**",
@@ -566,11 +566,11 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     embed.add_field(name="Artist", value=artist, inline=True)
     try:
         embed.add_field(name="Duration", value=f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
-    except:
+    except Exception as e:
         try:
             duration = int(metadata_manager.ffmpeg_get_track_length(audio_file))
             embed.add_field(name="Duration", value=f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
-        except:
+        except Exception as e:
             Embed.add_field(name="Duration", value="Unknown", inline=True)
     embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
 
@@ -580,13 +580,13 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     def playback():
         try:
-            print(f"Playing: {title} by {artist} in thread")
+            logging.error(f"Playing: {title} by {artist} in thread")
             source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options="-bufsize 10m -ss 00:00:00")
             volume_level = guild_volumes.get(guild_id, 100) / 100
             source = discord.PCMVolumeTransformer(source, volume=volume_level)
-            voice_client.play(source, after=lambda e: print(f"Playback finished: {e}") if e else None)
+            voice_client.play(source, after=lambda e: logging.error(f"Playback finished: {e}") if e else None)
         except Exception as e:
-            print(f"Error during playback: {e}")
+            logging.error(f"Error during playback: {e}")
 
     await asyncio.to_thread(playback)
 
@@ -600,10 +600,10 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
             temp_queue = list(server_queues[guild_id].queue)
             if temp_queue:
                 next_video_id, next_video_title = temp_queue[0]
-                print(f"Pre-downloading next track: {next_video_title}")
+                logging.error(f"Pre-downloading next track: {next_video_title}")
                 asyncio.create_task(download_audio(next_video_id))
         except Exception as e:
-            print(f"Error pre-downloading the next track: {e}")
+            logging.error(f"Error pre-downloading the next track: {e}")
 
     while voice_client.is_playing():
         await asyncio.sleep(1)
@@ -611,10 +611,14 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 @bot.event
 async def on_ready():
     try:
-        print(f"Bot is ready! Logged in as {bot.user}")
+        logging.error(f"Bot is ready! Logged in as {bot.user}")
         await update_bot_presence()
+        from web_app import start_web_server_in_background
+        start_web_server_in_background()
+        logging.error("Web interface started on http://0.0.0.0/queues")
     except Exception as e:
-        print(f"Error in on_ready: {e}")
+        logging.error(f"Error in on_ready: {e}")
+
 
 @bot.command(name="setprefix", aliases=["prefix"])
 async def setprefix(ctx, prefix: str):
@@ -956,8 +960,8 @@ async def show_queue(ctx, page: int = 1):
                 video_id = ''.join(item[:1]) 
                 video_title = ''.join(item[1:])  
                 embed.add_field(name=f"{index}. {video_id}", value=video_title, inline=False)
-            except:
-                print("Something was borked.")
+            except Exception as e:
+                logging.error("Something was borked.")
         await messagesender(bot, ctx.channel.id, embed=embed)
 
 @bot.command(name="search", aliases=["find"])
@@ -1060,11 +1064,11 @@ async def nowplaying(ctx):
         embed.add_field(name="Artist", value=artist, inline=True)
         try:
             embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
-        except:
+        except Exception as e:
             try:
                 duration = metadata_manager.ffmpeg_get_track_length(audio_file)
                 embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
-            except:
+            except Exception as e:
                 Embed.add_field(name="Duration", value="Unknown", inline=True)
         embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
 
@@ -1072,7 +1076,7 @@ async def nowplaying(ctx):
 
 @bot.command(name="shutdown", aliases=["die"])
 async def shutdown(ctx):
-    print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
+    logging.error(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
     if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Shutting down.")
         await bot.close()
@@ -1081,7 +1085,7 @@ async def shutdown(ctx):
 
 @bot.command(name="reboot", aliases=["restart"])
 async def reboot(ctx):
-    print(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
+    logging.error(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
     if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Restarting the bot...")
         os.execv(sys.executable, ['python'] + sys.argv)
@@ -1090,7 +1094,7 @@ async def reboot(ctx):
 
 @bot.command(name="dockboot", aliases=["dockerrestart"])
 async def dockboot(ctx):
-    print(f"Requesting ID: {ctx.author.id}\nOwner ID: {BOT_OWNER_ID}")
+    logging.error(f"Requesting ID: {ctx.author.id}\nOwner ID: {BOT_OWNER_ID}")
     if ctx.author.id == BOT_OWNER_ID:
         await messagesender(bot, ctx.channel.id, content="Shutting down and restarting")
         subprocess.Popen(["/bin/bash", "init.sh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1133,7 +1137,7 @@ async def seek(ctx, position: str):
                     h, m, s = map(float, time_str.split(":"))
                     return int(h * 3600 + m * 60 + s)
             except Exception as e:
-                print(f"Error getting duration: {e}")
+                logging.error(f"Error getting duration: {e}")
             return None
 
         duration = get_audio_duration(audio_file)
@@ -1416,7 +1420,7 @@ async def forceplay(ctx, *, query: str):
     await asyncio.sleep(1) 
 
     if ctx.voice_client and ctx.voice_client.is_playing():
-        print("Having to move things.")
+        logging.error("Having to move things.")
         queue = server_queues.get(guild_id)._queue if server_queues.get(guild_id) else None
 
         if queue and len(queue) > 1: 
@@ -1429,7 +1433,7 @@ async def forceplay(ctx, *, query: str):
                 del queue[from_pos]
                 queue.insert(to_pos, track)
             except IndexError:
-                print("Error moving track in fplay: Invalid index")
+                logging.error("Error moving track in fplay: Invalid index")
 
         ctx.voice_client.stop()
 
@@ -1771,10 +1775,10 @@ async def spotify(ctx, url: str):
 
         async def process_track(track_url):
             try:
-                print(f"🔍 Converting track: {track_url}")
+                logging.error(f"🔍 Converting track: {track_url}")
                 youtube_link = await spotify_to_youtube(track_url)
                 if not youtube_link:
-                    print(f"❌ Failed to convert {track_url}")
+                    logging.error(f"❌ Failed to convert {track_url}")
                     await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
                     return None
 
@@ -1783,7 +1787,7 @@ async def spotify(ctx, url: str):
                 return youtube_link, spotify_title
 
             except Exception as e:
-                print(f"⚠️ Error processing track {track_url}: {e}")
+                logging.error(f"⚠️ Error processing track {track_url}: {e}")
                 return None
         
         async def download_audio(youtube_link):
@@ -1804,7 +1808,7 @@ async def spotify(ctx, url: str):
                 await loop.run_in_executor(None, _download_sync, ydl_opts, youtube_link)
                 return output_path
             except Exception as e:
-                print(f"Error downloading {codec} format from {youtube_link}: {e}")
+                logging.error(f"Error downloading {codec} format from {youtube_link}: {e}")
                 return False
         
         def _download_sync(ydl_opts, url):
@@ -1880,10 +1884,12 @@ async def autoplay(ctx, mode: str):
             await messagesender(bot, ctx.channel.id, "Use `!autoplay on` or `!autoplay off`.")
             return
 
-        autoplay_enabled[guild_id] = mode.lower() == "on"
+        autoplay_value = mode.lower() == "on"
+        autoplay_enabled[guild_id] = autoplay_value
+        update_server_config(guild_id, "autoplay", autoplay_value)
         bot.intentional_disconnections[guild_id] = False 
 
-        status = "enabled" if autoplay_enabled[guild_id] else "disabled"
+        status = "enabled" if autoplay_value else "disabled"
         await messagesender(bot, ctx.channel.id, f"Autoplay is now {status} for this server.")
 
 @bot.command(name="stats")
@@ -1979,24 +1985,65 @@ async def send_global_message(ctx, *, message: str):
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
     
-    async with aiohttp.ClientSession() as session:
-        try:
+    try:
+        api_url = f"https://api.song.link/v1-alpha.1/links?Country=US&songIfSingle=true&url={url}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Mode': 'navigate'
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, headers=headers) as response:
+                if response.status != 200:
+                    raise ValueError(f"API request failed with status {response.status}")
+
+                data = await response.json()
+
+                youtube_data = data.get("linksByPlatform", {}).get("youtube")
+                if not youtube_data:
+                    raise ValueError("YouTube data not found in API response.")
+
+                EID = youtube_data.get("entityUniqueId")
+                if not EID:
+                    raise ValueError("Entity ID missing from API response.")
+
+                entity_data = data.get("entitiesByUniqueId", {}).get(EID)
+                if not entity_data:
+                    raise ValueError("Entity data missing from API response.")
+
+                title = entity_data.get("title")
+                if not title:
+                    raise ValueError("Title missing from API response.")
+
+                if is_banned_title(title):
+                    raise ValueError("Out of bounds error: This content is not allowed.")
+
+                return title
+
+    except (aiohttp.ClientError, ValueError, KeyError) as e:
+        logging.error(f"API request failed: {e}")
+
+    try:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 response.raise_for_status()
                 html_content = await response.text()
-                
+
                 soup = BeautifulSoup(html_content, "html.parser")
-                title_element = soup.find_all(name="title")[0]
-                title = str(title_element)
-                title = title.replace("<title>", "").replace("</title>", "").removesuffix(" - YouTube").replace("&amp;","&")
-                
+                title = soup.title.string.strip().removesuffix(" - YouTube").replace("&amp;", "&")
+
                 if is_banned_title(title):
                     raise ValueError("Out of bounds error: This content is not allowed.")
-                    
+
                 return title
-        except (aiohttp.ClientError, IndexError) as e:
-            print(f"Error fetching video title: {e}")
-            return None
+
+    except (aiohttp.ClientError, AttributeError) as e:
+        logging.error(f"Error fetching video title from YouTube page: {e}")
+        return None
 
 @bot.event
 async def on_message_delete(message):
@@ -2018,7 +2065,7 @@ async def get_youtube_playlist_title(playlist_id):
                 
                 match = re.search(r'var ytInitialData = ({.*?});</script>', html_content, re.DOTALL)
                 if not match:
-                    print(f"Error: Could not find JSON metadata for {playlist_id}")
+                    logging.error(f"Error: Could not find JSON metadata for {playlist_id}")
                     return "Unknown Playlist"
                 
                 json_data = json.loads(match.group(1))
@@ -2026,7 +2073,7 @@ async def get_youtube_playlist_title(playlist_id):
                 title = json_data.get("header", {}).get("playlistHeaderRenderer", {}).get("title")
                 
                 if not title:
-                    print(f"Error: Playlist title not found in metadata for {playlist_id}")
+                    logging.error(f"Error: Playlist title not found in metadata for {playlist_id}")
                     return "Unknown Playlist"
                 
                 if is_banned_title(title):
@@ -2034,7 +2081,7 @@ async def get_youtube_playlist_title(playlist_id):
                     
                 return title
         except (aiohttp.ClientError, json.JSONDecodeError, IndexError, KeyError) as e:
-            print(f"Error fetching playlist title: {e}")
+            logging.error(f"Error fetching playlist title: {e}")
             return "Unknown Playlist"
 
 
@@ -2043,7 +2090,7 @@ async def timeout_handler(ctx):
 
     if ctx.guild.id in bot.voice_clients and ctx.voice_client and ctx.voice_client.is_connected():
         await ctx.voice_client.disconnect()
-        print(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
+        logging.error(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
 
 async def update_bot_presence():
     """ Updates the bot's presence based on the stats setting. """

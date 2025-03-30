@@ -5,6 +5,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 import aiohttp
+import logging
 
 class SoundCloudAudioStreamer:
     def __init__(self, url):
@@ -19,7 +20,7 @@ class SoundCloudAudioStreamer:
     async def download_and_convert(self):
         output_path = f"music/{self.url.split('/')[-1]}"
         if os.path.exists(output_path):
-            print(f"File already cached: {output_path}")
+            logging.error(f"File already cached: {output_path}")
             return output_path
         
         ydl_opts = {
@@ -37,7 +38,7 @@ class SoundCloudAudioStreamer:
             await loop.run_in_executor(None, self._download_sync, ydl_opts)
             return f"{output_path}.mp3"
         except Exception as e:
-            print(f"Error downloading SoundCloud audio: {e}")
+            logging.error(f"Error downloading SoundCloud audio: {e}")
             return None
 
     def _download_sync(self, ydl_opts):

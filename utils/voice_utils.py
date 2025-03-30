@@ -9,6 +9,7 @@ import wave
 import stt
 from discord.ext import commands
 from tempfile import NamedTemporaryFile
+import logging
 
 MODEL_DIR = "models"
 MODEL_FILE = os.path.join(MODEL_DIR, "model.tflite")
@@ -21,18 +22,18 @@ def install_coqui_stt():
     """Ensure Coqui STT is installed."""
     try:
         import stt
-        print("✅ Coqui STT is installed.")
+        logging.error("✅ Coqui STT is installed.")
     except ImportError:
-        print("📥 Installing Coqui STT...")
+        logging.error("📥 Installing Coqui STT...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "coqui-stt"])
         import stt
 
 def download_file(url, destination):
     """Download a file if it does not exist."""
     if not os.path.exists(destination):
-        print(f"📥 Downloading {destination}...")
+        logging.error(f"📥 Downloading {destination}...")
         urllib.request.urlretrieve(url, destination)
-        print(f"✅ Downloaded: {destination}")
+        logging.error(f"✅ Downloaded: {destination}")
 
 def setup_models():
     """Ensure model files exist."""
@@ -97,7 +98,7 @@ async def stop_listening(ctx):
 
 def finished_callback(sink, ctx):
     """Continuously processes voice commands as they're spoken."""
-    print("🔊 Processing voice commands in real-time!")
+    logging.error("🔊 Processing voice commands in real-time!")
 
     for user, audio_data in sink.audio_data.items():
         with NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
@@ -110,7 +111,7 @@ def finished_callback(sink, ctx):
 
         # Transcribe user audio
         transcribed_text = recognize_audio(temp_audio_path)
-        print(f"🎤 {user}: {transcribed_text}")
+        logging.error(f"🎤 {user}: {transcribed_text}")
 
         # Process command live
         asyncio.create_task(process_voice_command(ctx, transcribed_text))
@@ -151,7 +152,7 @@ async def process_voice_command(ctx, text):
     elif command == "leave":
         await ctx.invoke(bot.get_command("leave"))
     
-    print(f"✅ Recognized command: {command}")
+    logging.error(f"✅ Recognized command: {command}")
 
 def recognize_audio(audio_file):
     """Process a WAV file and return transcribed text."""

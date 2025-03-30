@@ -3,6 +3,7 @@ import json
 import musicbrainzngs
 import ffmpeg
 import subprocess
+import logging
 
 class MetadataManager:
     def __init__(self, cache_dir, editors_file, useragent, version, contact):
@@ -83,5 +84,5 @@ class MetadataManager:
                 h, m, s = map(float, time_str.split(":"))
                 return int(h * 3600 + m * 60 + s)
         except Exception as e:
-            print(f"Error getting duration: {e}")
+            logging.error(f"Error getting duration: {e}")
         return None
