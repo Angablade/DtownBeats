@@ -61,6 +61,7 @@ COMMANDS_FILE_PATH = "config/commands.txt"
 STATS_CONFIG_PATH = "config/stats_config.json"
 BLACKLIST_PATH = "config/blackwhitelist.json"
 DEBUG_CONFIG_PATH = "config/debug_mode.json"
+cookies_file_path = "config/cookies.txt"
 
 #INITIALIZATION
 musicbrainzngs.set_useragent(MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
@@ -72,6 +73,10 @@ os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
 if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "w") as f:
         f.write("{}")
+
+if not os.path.exists(cookies_file_path):
+    with open(CONFIG_FILE, "w") as f:
+        f.write("\n")
 
 def is_owner_or_server_owner(ctx):
     if ctx.author.id == BOT_OWNER_ID:
@@ -1785,6 +1790,7 @@ async def spotify(ctx, url: str):
             output_path = f"music/{youtube_link}.mp3"
             ydl_opts = {
                 'format': 'bestaudio[acodec^=opus]/bestaudio',
+                'cookies': "/config/cookies.txt",
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',

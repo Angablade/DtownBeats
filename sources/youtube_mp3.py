@@ -44,6 +44,7 @@ class YouTubeAudioStreamer:
     async def _attempt_download(self, url, codec, quality, output_path):
         ydl_opts = {
             'format': 'bestaudio[acodec^=opus]/bestaudio',
+            'cookies': "/config/cookies.txt",
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': codec,
