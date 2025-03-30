@@ -48,7 +48,7 @@ class AppleMusicScraper:
             self.debug_info.append(f"Error extracting YouTube link: {e}")
         return None
 
-async def get_apple_music_audio(url, ctx):
+async def get_apple_music_audio(ctx, url):
     scraper = AppleMusicScraper(url, ctx)
     youtube_url = await scraper.fetch_metadata(ctx)
     return youtube_url
