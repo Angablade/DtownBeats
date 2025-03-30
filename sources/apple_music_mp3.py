@@ -23,13 +23,13 @@ class AppleMusicScraper:
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.api_url, headers=headers) as response:
                     data = await response.json()
-                    return self.extract_youtube_link(data, ctx)
+                    return await self.extract_youtube_link(data, ctx)
         except Exception as e:
             error_message = f"Error fetching metadata: {e}"
             print(error_message)
             return None
 
-    def extract_youtube_link(self, data, ctx):
+    async def extract_youtube_link(self, data, ctx):
         try:
             youtube_id = data["linksByPlatform"].get("youtube").get("entityUniqueId").split(':')[-1]
             await ctx.send(youtube_id)
