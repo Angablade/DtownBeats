@@ -33,9 +33,7 @@ class AppleMusicScraper:
         try:
             youtube_id = data["linksByPlatform"].get("youtube").get("entityUniqueId").split(':')[-1]
             await ctx.send(youtube_id)
-            if youtube_id:
-                youtube_url = f"https://www.youtube.com/watch?v={youtube_id}"
-                return youtube_url
+            return youtube_id
         except KeyError as e:
             await ctx.send("Error extracting youtube link")
         return None
@@ -43,4 +41,5 @@ class AppleMusicScraper:
 async def get_apple_music_audio(ctx, url):
     scraper = AppleMusicScraper(url, ctx)
     youtube_url = await scraper.fetch_metadata(ctx)
+    ctx.send(youtube_url)
     return youtube_url
