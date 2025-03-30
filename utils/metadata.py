@@ -33,7 +33,7 @@ class MetadataManager:
             self.save_editors()
 
     def get_metadata_path(self, filename):
-        return os.path.join(self.cache_dir, f"{filename}.json")
+        return os.path.join(self.cache_dir, f"{filename.replace("|","")}.json")
 
     def load_metadata(self, filename):
         metadata_path = self.get_metadata_path(filename)

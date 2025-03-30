@@ -854,7 +854,6 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
             video_title = title
             video_id = f"|{video_id}"
 
-        # Fetch and cache metadata
         metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
         metadata_manager.save_metadata(video_id, metadata)
 
@@ -1840,15 +1839,11 @@ async def applemusic(ctx, url: str):
         await handle_voice_connection(ctx)
     
         await messagesender(bot, ctx.channel.id, f"Processing Apple Music link: <{url}>")
-        youtube_link = await get_apple_music_audio(ctx, url)
-        if youtube_link:
-            file_path = await get_audio_filename(youtube_link)
-            if file_path:
-                await queue_and_play_next(ctx, ctx.guild.id, file_path, "-{AppleMusic Link}-")
-            else:
-                await messagesender(bot, ctx.channel.id, "Failed to download Apple Music track.")
+        video_id = await get_apple_music_audio(ctx, url)
+        if video_id:
+            await queue_and_play_next(ctx, guild_id, video_id)
         else:
-            await messagesender(bot, ctx.channel.id, "Failed to process Apple Music track.")
+            await messagesender(bot, ctx.channel.id, content="Failed to find the song.")
 
 @bot.command(name="history", aliases=["played"])
 async def history(ctx):
