@@ -4,8 +4,11 @@ from starlette.staticfiles import StaticFiles
 import uvicorn
 import threading
 import html
+
 from bot3 import server_queues
+
 app = FastAPI()
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/queues", response_class=HTMLResponse)
@@ -26,6 +29,7 @@ async def list_queues():
       <body>
         <h1>Queues for All Guilds</h1>
     """
+
     for guild_id, queue in server_queues.items():
         html_content += f"<h2>Guild ID: {html.escape(str(guild_id))}</h2>"
         html_content += """
