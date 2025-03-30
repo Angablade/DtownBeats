@@ -75,7 +75,7 @@ if not os.path.exists(CONFIG_FILE):
         f.write("{}")
 
 if not os.path.exists(cookies_file_path):
-    with open(CONFIG_FILE, "w") as f:
+    with open(cookies_file_path, "w") as f:
         f.write("\n")
 
 def is_owner_or_server_owner(ctx):
