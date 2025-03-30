@@ -40,5 +40,4 @@ class AppleMusicScraper:
 async def get_apple_music_audio(ctx, url):
     scraper = AppleMusicScraper(url, ctx)
     youtube_url = await scraper.fetch_metadata(ctx)
-    ctx.send(youtube_url)
     return youtube_url
