@@ -35,14 +35,7 @@ class AppleMusicScraper:
             self.debug_info.append(f"Error extracting YouTube link: {e}")
         return None
 
-    async def post_debug_info(self):
-        embed = Embed(title="Debug Information", color=0x00ff00)
-        for info in self.debug_info:
-            embed.add_field(name="Debug Info", value=info, inline=False)
-        await messagesender(self.ctx.bot, self.ctx.channel.id, embed=embed)
-
 async def get_apple_music_audio(url, ctx):
     scraper = AppleMusicScraper(url, ctx)
     youtube_url = await scraper.fetch_metadata()
-    await scraper.post_debug_info()
     return youtube_url
