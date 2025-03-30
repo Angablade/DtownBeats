@@ -24,10 +24,15 @@ class AppleMusicScraper:
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.api_url, headers=headers) as response:
                     data = await response.json()
+                    ctx.channel.send(f"API Response: {json.dumps(data, indent=2)}")
                     self.debug_info.append(f"API Response: {json.dumps(data, indent=2)}")
+                    ctx.channel.send(self.extract_youtube_link(data))
                     return self.extract_youtube_link(data)
         except Exception as e:
             error_message = f"Error fetching metadata: {e}"
+
+            ctx.channel.send(error_message)
+            
             self.debug_info.append(error_message)
             print(error_message)
             return None
