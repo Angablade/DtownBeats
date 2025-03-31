@@ -223,6 +223,7 @@ track_history = {}
 autoplay_enabled = {}
 message_map = {}
 last_active_channels = {} 
+now_playing = {}
 
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
@@ -578,6 +579,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
     current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
+    update_now_playing(guild_id, track_id, video_title, image_path)
 
     def playback():
         try:
@@ -613,11 +615,13 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 async def on_ready():
     try:
         from utils.web_app import start_web_server_in_background
-        start_web_server_in_background(server_queues)
+        start_web_server_in_background(server_queues, now_playing)
         logging.error(f"Bot is ready! Logged in as {bot.user}")
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
 
+def update_now_playing(guild_id, track_id, title, album_art_url):
+    now_playing[guild_id] = (track_id, title, album_art_url)
 
 @bot.command(name="setprefix", aliases=["prefix"])
 async def setprefix(ctx, prefix: str):
