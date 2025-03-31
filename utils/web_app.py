@@ -84,7 +84,7 @@ async def list_queues():
 
             html_content += f"""
             <h2>Now Playing: {html.escape(artist)} - {html.escape(title)}</h2>
-            <p><b>Length:</b> {html.escape(duration)}</p>
+            <p><b>Length:</b> {html.escape(str(duration))}</p>
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
             if song[2]:
