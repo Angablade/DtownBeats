@@ -596,7 +596,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
     current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
-    update_now_playing(guild_id, _id, video_title, image_path)
+    update_now_playing(guild_id, video_id, video_title, image_path)
 
     def playback():
         try:
@@ -634,6 +634,10 @@ async def on_ready():
         from utils.web_app import start_web_server_in_background
         start_web_server_in_background(server_queues, now_playing)
         logging.error(f"Bot is ready! Logged in as {bot.user}")
+        for guild in client.guilds:
+            file_path = os.path.join('static', f"{guild.id}.png")
+            if not os.path.exists(file_path):
+                await download_guild_icon(guild)
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
 
