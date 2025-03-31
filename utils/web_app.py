@@ -5,11 +5,10 @@ import uvicorn
 import threading
 import html
 
-from bot3 import server_queues
-
 app = FastAPI()
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+server_queues = {}  # Temporary placeholder
 
 @app.get("/queues", response_class=HTMLResponse)
 async def list_queues():
@@ -57,6 +56,8 @@ async def list_queues():
 def run_web_app():
     uvicorn.run(app, host="0.0.0.0", port=80)
 
-def start_web_server_in_background():
+def start_web_server_in_background(queues):
+    global server_queues
+    server_queues = queues
     thread = threading.Thread(target=run_web_app, daemon=True)
     thread.start()
