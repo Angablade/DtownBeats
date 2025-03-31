@@ -579,7 +579,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
     current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
-    update_now_playing(guild_id, track_id, video_title, image_path)
+    update_now_playing(guild_id, video_id, video_title, image_path)
 
     def playback():
         try:
