@@ -322,15 +322,16 @@ async def on_guild_join(guild):
     logging.error(f"Joined new guild: {guild.name}, initialized queue.")
 
 async def download_guild_icon(guild):
-    icon_url = guild.icon_url
-    if icon_url:
+    icon = guild.icon
+    if icon:
+        icon_url = icon.replace(format="png")
         async with aiohttp.ClientSession() as session:
-            async with session.get(icon_url) as resp:
+            async with session.get(str(icon_url)) as resp:
                 if resp.status == 200:
                     file_path = os.path.join('static', f"{guild.id}.png")
                     with open(file_path, 'wb') as f:
                         f.write(await resp.read())
-                    print(f"Downloaded {guild.name}'s icon as {file_path}")
+                    print(f"Downloaded {guild.name}'s icon to {file_path}")
                 else:
                     print(f"Failed to download icon for {guild.name}")
     else:
@@ -634,10 +635,10 @@ async def on_ready():
         from utils.web_app import start_web_server_in_background
         start_web_server_in_background(server_queues, now_playing)
         logging.error(f"Bot is ready! Logged in as {bot.user}")
-        for guild in client.guilds:
-            file_path = os.path.join('static', f"{guild.id}.png")
-            if not os.path.exists(file_path):
-                await download_guild_icon(guild)
+        for guild in bot.guilds:
+                file_path = os.path.join('static', f"{guild.id}.png")
+                if not os.path.exists(file_path):
+                    await download_guild_icon(guild)
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
 
