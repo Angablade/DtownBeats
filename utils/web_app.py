@@ -5,12 +5,19 @@ from starlette.staticfiles import StaticFiles
 import uvicorn
 import threading
 import html
+from utils.metadata import MetadataManager
 
 if not os.path.exists("static"):
     os.makedirs("static")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/albumart", StaticFiles(directory="albumart"), name="albumart")
+
+MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
+MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
+MUSICBRAINZ_CONTACT = os.getenv("MUSICBRAINZ_CONTACT", "default@example.com")
+metadata_manager = MetadataManager("./metacache","./config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 
 server_queues = {}
 now_playing = {}
@@ -56,7 +63,7 @@ async def list_queues():
     """
 
     for guild_id in server_queues.keys():
-        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')">{html.escape(str(guild_id))}</button>'
+        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="/static/{html.escape(str(guild_id))}.png" alt="/{html.escape(str(guild_id))}" /></button>'
 
     html_content += "</div>"
 
@@ -64,12 +71,24 @@ async def list_queues():
         html_content += f'<div id="tab-{guild_id}" class="tabcontent">'
         if guild_id in now_playing:
             song = now_playing[guild_id]
+            
+            metadata = metadata_manager.load_metadata(song[0])
+            if not metadata:
+                video_title = current_track[1]
+                metadata = metadata_manager.get_or_fetch_metadata(song[0], song[1])
+                metadata_manager.save_metadata(video_id, metadata)
+
+            artist = metadata["artist"]
+            title = metadata["title"]
+            duration = metadata.get("duration", "Unknown")
+
             html_content += f"""
-            <h2>Now Playing: {html.escape(song[1])}</h2>
+            <h2>Now Playing: {html.escape(artist)} - {html.escape(title)}</h2>
+            <p><b>Length:</b> {html.escape(duration)}</p>
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
             if song[2]:
-                html_content += f'<img src="{html.escape(song[2])}" alt="Album Art">'
+                html_content += f'<img src="{html.escape(song[2][4:])}" alt="Album Art">'
         
         html_content += """
         <h3>Upcoming Tracks:</h3>

@@ -213,6 +213,7 @@ intents.guild_messages = True
 start_time = time.time()
 fetcher = AlbumArtFetcher()
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
+os.makedirs('static', exist_ok=True)
 
 bot.intentional_disconnections = {}
 bot.timeout_tasks = {}
@@ -317,7 +318,23 @@ async def on_voice_state_update(member, before, after):
 async def on_guild_join(guild):
     if guild.id not in server_queues:
         server_queues[guild.id] = asyncio.Queue()
+    await download_guild_icon(guild)
     logging.error(f"Joined new guild: {guild.name}, initialized queue.")
+
+async def download_guild_icon(guild):
+    icon_url = guild.icon_url
+    if icon_url:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(icon_url) as resp:
+                if resp.status == 200:
+                    file_path = os.path.join('static', f"{guild.id}.png")
+                    with open(file_path, 'wb') as f:
+                        f.write(await resp.read())
+                    print(f"Downloaded {guild.name}'s icon as {file_path}")
+                else:
+                    print(f"Failed to download icon for {guild.name}")
+    else:
+        print(f"{guild.name} does not have an icon.")
 
 async def get_related_video(video_id, guild_id, retry_count=3):
     url = f"https://www.youtube.com/watch?v={video_id}"
@@ -579,7 +596,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
     current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
-    update_now_playing(guild_id, video_id, video_title, image_path)
+    update_now_playing(guild_id, _id, video_title, image_path)
 
     def playback():
         try:
