@@ -21,4 +21,6 @@ services:
       - QUEUE_PAGE_SIZE=10
       - HISTORY_PAGE_SIZE=10
       - TIMEOUT_TIME=60
+    ports:
+      - "3333:80"
     restart: unless-stopped

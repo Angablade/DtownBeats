@@ -5,6 +5,8 @@ WORKDIR /app
 COPY init.sh /init.sh
 RUN chmod +x /init.sh
 
+EXPOSE 80
+
 ENV MUSICBRAINZ_USERAGENT="default_user"
 ENV MUSICBRAINZ_VERSION="1.0"
 ENV MUSICBRAINZ_CONTACT="default@example.com"
@@ -15,5 +17,4 @@ ENV QUEUE_PAGE_SIZE=10
 ENV HISTORY_PAGE_SIZE=10
 ENV TIMEOUT_TIME=60
 
-CMD ["/init.sh"] 
-
+CMD ["/init.sh"]

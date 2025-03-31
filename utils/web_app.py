@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
@@ -5,10 +6,14 @@ import uvicorn
 import threading
 import html
 
+if not os.path.exists("static"):
+    os.makedirs("static")
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-server_queues = {}  # Temporary placeholder
+
+server_queues = {}
 
 @app.get("/queues", response_class=HTMLResponse)
 async def list_queues():

@@ -13,7 +13,7 @@ pip install --no-cache-dir "pybind11>=2.12" "numpy<2" py-cord pyyaml requests yt
 
 
 # Ensure necessary directories exist
-for dir in /app/{lyrics,music,config,models,sources,utils,albumart,metacache}; do
+for dir in /app/{lyrics,music,config,models,sources,utils,albumart,metacache,static}; do
     mkdir -p "$dir" && chmod 777 "$dir"
 done
 
