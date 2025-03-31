@@ -6,14 +6,12 @@ import uvicorn
 import threading
 import html
 
-# Ensure 'static' directory exists
 if not os.path.exists("static"):
     os.makedirs("static")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Placeholder for queues and currently playing songs
 server_queues = {}
 now_playing = {}
 
@@ -57,17 +55,13 @@ async def list_queues():
         <div class="tab">
     """
 
-    # Generate tabs for each server
     for guild_id in server_queues.keys():
         html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')">{html.escape(str(guild_id))}</button>'
 
     html_content += "</div>"
 
-    # Generate content for each server
     for guild_id, queue in server_queues.items():
         html_content += f'<div id="tab-{guild_id}" class="tabcontent">'
-        
-        # **Now Playing Section**
         if guild_id in now_playing:
             song = now_playing[guild_id]
             html_content += f"""
@@ -78,7 +72,6 @@ async def list_queues():
             if song["album_art"]:
                 html_content += f'<img src="{html.escape(song["album_art"])}" alt="Album Art">'
         
-        # **Queue Section**
         html_content += """
         <h3>Upcoming Tracks:</h3>
         <table>
@@ -94,7 +87,7 @@ async def list_queues():
             html_content += f"""
             <tr>
               <td>{index}</td>
-              <td>{track_id}</td>
+              <td><a href="https://youtube.com/watch?v={track_id}">{track_id}</a></td>
               <td>{title}</td>
             </tr>
             """
