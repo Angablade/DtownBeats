@@ -612,15 +612,11 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 @bot.event
 async def on_ready():
     try:
+        import utils.web_app
+        asyncio.create_task(utils.web_app.start_web_server_in_background())
         logging.error(f"Bot is ready! Logged in as {bot.user}")
-        await update_bot_presence()
-        
-        from utils.web_app import start_web_server_in_background
-        start_web_server_in_background()
-        logging.error("Web interface started on http://0.0.0.0/queues")
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
-
 
 @bot.command(name="setprefix", aliases=["prefix"])
 async def setprefix(ctx, prefix: str):
