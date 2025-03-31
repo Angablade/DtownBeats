@@ -65,12 +65,11 @@ async def list_queues():
         if guild_id in now_playing:
             song = now_playing[guild_id]
             html_content += f"""
-            <h2>Now Playing: {html.escape(song['title'])}</h2>
-            <p><b>Artist:</b> {html.escape(song['artist'])}</p>
-            <p><b>Album:</b> {html.escape(song['album'])}</p>
+            <h2>Now Playing: {html.escape(song[1])}</h2>
+            <p><b>ID:</b> {html.escape(song[0])}</p>
             """
             if song["album_art"]:
-                html_content += f'<img src="{html.escape(song["album_art"])}" alt="Album Art">'
+                html_content += f'<img src="{html.escape(song[2])}" alt="Album Art">'
         
         html_content += """
         <h3>Upcoming Tracks:</h3>
