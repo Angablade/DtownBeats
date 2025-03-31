@@ -11,8 +11,8 @@ if not os.path.exists("static"):
     os.makedirs("static")
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/albumart", StaticFiles(directory="albumart"), name="albumart")
+app.mount("/static", StaticFiles(directory="/app/static"), name="static")
+app.mount("/albumart", StaticFiles(directory="/app/albumart"), name="albumart")
 
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")

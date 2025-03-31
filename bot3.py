@@ -328,7 +328,7 @@ async def download_guild_icon(guild):
         async with aiohttp.ClientSession() as session:
             async with session.get(str(icon_url)) as resp:
                 if resp.status == 200:
-                    file_path = os.path.join('static', f"{guild.id}.png")
+                    file_path = os.path.join('app', 'static', f"{guild.id}.png")
                     with open(file_path, 'wb') as f:
                         f.write(await resp.read())
                     print(f"Downloaded {guild.name}'s icon to {file_path}")
