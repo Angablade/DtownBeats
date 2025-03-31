@@ -68,7 +68,7 @@ async def list_queues():
             <h2>Now Playing: {html.escape(song[1])}</h2>
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
-            if song["album_art"]:
+            if song[2]:
                 html_content += f'<img src="{html.escape(song[2])}" alt="Album Art">'
         
         html_content += """
@@ -100,6 +100,7 @@ async def list_queues():
     </html>
     """
     return HTMLResponse(content=html_content)
+
 
 def run_web_app():
     uvicorn.run(app, host="0.0.0.0", port=80)
