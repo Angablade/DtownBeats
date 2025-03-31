@@ -24,7 +24,7 @@ from utils.youtube_pl import grab_youtube_pl
 from utils.lyrics import Lyrics
 from utils.albumart import AlbumArtFetcher
 from utils.metadata import MetadataManager
-from utils.web_app import start_web_server_in_background
+
 
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
@@ -615,6 +615,7 @@ async def on_ready():
         logging.error(f"Bot is ready! Logged in as {bot.user}")
         await update_bot_presence()
         
+        from utils.web_app import start_web_server_in_background
         start_web_server_in_background()
         logging.error("Web interface started on http://0.0.0.0/queues")
     except Exception as e:
