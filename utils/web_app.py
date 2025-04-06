@@ -14,9 +14,8 @@ if not os.path.exists("static"):
 
 app = FastAPI()
 
-# Absolute path to the static and albumart directories
-static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../static")
-albumart_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../albumart")
+static_dir = "/static")
+albumart_dir = "/albumart")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.mount("/albumart", StaticFiles(directory=albumart_dir), name="albumart")
 
