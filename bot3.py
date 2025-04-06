@@ -621,7 +621,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
             temp_queue = list(server_queues[guild_id].queue)
             if temp_queue:
                 next_video_id, next_video_title = temp_queue[0]
-                logging.error(f"Pre-downloading next track: {next_video_title}")
+                logging.info(f"Pre-downloading next track: {next_video_title}")
                 asyncio.create_task(download_audio(next_video_id))
         except Exception as e:
             logging.error(f"Error pre-downloading the next track: {e}")
