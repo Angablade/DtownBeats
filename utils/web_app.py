@@ -13,11 +13,13 @@ if not os.path.exists("static"):
     os.makedirs("static")
 
 app = FastAPI()
-static_dir = "../static"   # Going up one level from utils to access the static folder
-albumart_dir = "../albumart"  # Going up one level from utils to access the albumart folder
-# Mounting the static and albumart folders
+
+# Absolute path to the static and albumart directories
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../static")
+albumart_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../albumart")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.mount("/albumart", StaticFiles(directory=albumart_dir), name="albumart")
+
 
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
