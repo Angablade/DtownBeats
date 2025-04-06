@@ -32,6 +32,81 @@ def encode_image_as_base64(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
+@app.get("/queues/{guild_id}", response_class=HTMLResponse)
+async def list_queue_for_guild(guild_id: str):
+    if guild_id not in server_queues:
+        return HTMLResponse(content=f"<h1>No queue found for Guild ID: {guild_id}</h1>", status_code=404)
+
+    html_content = f"""
+    <html>
+      <head>
+        <title>Bot Queue - {guild_id}</title>
+        <style>
+          body {{ font-family: Arial, sans-serif; margin: 20px; }}
+          h1 {{ color: #333; text-align: center; }}
+          table {{ border-collapse: collapse; width: 100%; margin-top: 10px; }}
+          th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+          th {{ background-color: #f2f2f2; }}
+          img {{ max-width: 150px; display: block; margin: 10px auto; border-radius: 10px; }}
+        </style>
+      </head>
+      <body>
+        <h1>Music Queue for Guild ID: {guild_id}</h1>
+    """
+
+    queue = server_queues[guild_id]
+    
+    if guild_id in now_playing:
+        song = now_playing[guild_id]
+        
+        metadata = metadata_manager.load_metadata(song[0])
+        if not metadata:
+            video_title = song[1]
+            metadata = metadata_manager.get_or_fetch_metadata(song[0], song[1])
+            metadata_manager.save_metadata(song[0], metadata)
+
+        artist = metadata["artist"]
+        title = metadata["title"]
+        duration = metadata.get("duration", "Unknown")
+
+        html_content += f"""
+        <h2>Now Playing: {html.escape(artist)} - {html.escape(title)}</h2>
+        <p><b>Length:</b> {html.escape(str(duration))}</p>
+        <p><b>ID:</b> {html.escape(song[0])}</p>
+        """
+        if song[2]:
+            html_content += f'<img src="/albumart/{song[2][4:]}" alt="Album Art">'
+        else:
+            html_content += f'<img src="/albumart/default.jpg" alt="Default Album Art">'
+    
+    html_content += """
+    <h3>Upcoming Tracks:</h3>
+    <table>
+      <tr>
+        <th>#</th>
+        <th>Track ID</th>
+        <th>Title</th>
+      </tr>
+    """
+    
+    for index, item in enumerate(queue._queue, start=1):
+        track_id = html.escape(str(item[0]))
+        title = html.escape(str(item[1]))
+        html_content += f"""
+        <tr>
+          <td>{index}</td>
+          <td><a href="https://youtube.com/watch?v={track_id}">{track_id}</a></td>
+          <td>{title}</td>
+        </tr>
+        """
+    
+    html_content += """
+    </table>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
 @app.get("/queues", response_class=HTMLResponse)
 async def list_queues():
     html_content = """
@@ -76,7 +151,6 @@ async def list_queues():
         encoded_image = f"/static/{guild_id}.png"
         html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="{encoded_image}" alt="{str(guild_id)}" /></button>'
 
-
     html_content += "</div>"
 
     for guild_id, queue in server_queues.items():
@@ -86,9 +160,9 @@ async def list_queues():
             
             metadata = metadata_manager.load_metadata(song[0])
             if not metadata:
-                video_title = current_track[1]
+                video_title = song[1]
                 metadata = metadata_manager.get_or_fetch_metadata(song[0], song[1])
-                metadata_manager.save_metadata(video_id, metadata)
+                metadata_manager.save_metadata(song[0], metadata)
 
             artist = metadata["artist"]
             title = metadata["title"]
@@ -133,6 +207,7 @@ async def list_queues():
     </html>
     """
     return HTMLResponse(content=html_content)
+
 
 
 def run_web_app():
