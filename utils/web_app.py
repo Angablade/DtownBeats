@@ -9,13 +9,10 @@ import base64
 import logging
 from utils.metadata import MetadataManager
 
-if not os.path.exists("static"):
-    os.makedirs("static")
-
 app = FastAPI()
 
-static_dir = "/static"
-albumart_dir = "/albumart"
+static_dir = "/app/static"
+albumart_dir = "/app/albumart"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.mount("/albumart", StaticFiles(directory=albumart_dir), name="albumart")
 
