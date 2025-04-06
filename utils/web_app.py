@@ -69,7 +69,7 @@ async def list_queues():
     """
 
     for guild_id in server_queues.keys():
-        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="{encode_image_as_base64("/static/{str(guild_id)}.png")}" alt="{str(guild_id)}" /></button>'
+        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="data:image/png;base64,{encode_image_as_base64(os.path.join("/static/", str(guild_id)", ".png"))}" alt="{str(guild_id)}" /></button>'
 
     html_content += "</div>"
 
