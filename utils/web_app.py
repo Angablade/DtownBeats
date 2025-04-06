@@ -5,6 +5,7 @@ from starlette.staticfiles import StaticFiles
 import uvicorn
 import threading
 import html
+import base64
 from utils.metadata import MetadataManager
 
 if not os.path.exists("static"):
@@ -21,6 +22,11 @@ metadata_manager = MetadataManager("./metacache","./config/metadataeditors.json"
 
 server_queues = {}
 now_playing = {}
+
+def encode_image_as_base64(image_path):
+    """Helper function to read an image file and return its base64 encoding."""
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
 
 @app.get("/queues", response_class=HTMLResponse)
 async def list_queues():
@@ -88,7 +94,10 @@ async def list_queues():
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
             if song[2]:
-                html_content += f'<img src="{html.escape(song[2][4:])}" alt="Album Art">'
+                # Replace the image link with the base64 encoded image
+                album_art_path = song[2][4:]  # Assuming path starts with "/albumart/"
+                album_art_base64 = encode_image_as_base64(album_art_path)
+                html_content += f'<img src="data:image/png;base64,{album_art_base64}" alt="Album Art">'
         
         html_content += """
         <h3>Upcoming Tracks:</h3>
