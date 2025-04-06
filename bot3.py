@@ -328,7 +328,7 @@ async def download_guild_icon(guild):
         async with aiohttp.ClientSession() as session:
             async with session.get(str(icon_url)) as resp:
                 if resp.status == 200:
-                    file_path = os.path.join('app', 'static', f"{guild.id}.png")
+                    file_path = os.path.join(f"/app/static/{guild.id}.png")
                     with open(file_path, 'wb') as f:
                         f.write(await resp.read())
                     print(f"Downloaded {guild.name}'s icon to {file_path}")
@@ -878,18 +878,21 @@ async def fetch_video_id_from_ytsearch(search: str, ctx):
     return result
 
 async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
+    logging.info(f"Queueing video: {video_id} - {title}")
     try:
         if title is None:
             video_title = await get_youtube_video_title(video_id)
             if not video_title:
                 await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
                 return
+
+            metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
+            metadata_manager.save_metadata(video_id, metadata)
         else:
             video_title = title
+            metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
+            metadata_manager.save_metadata(video_id, metadata)
             video_id = f"|{video_id}"
-
-        metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
-        metadata_manager.save_metadata(video_id, metadata)
 
         await server_queues[guild_id].put([video_id, video_title])
         await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
