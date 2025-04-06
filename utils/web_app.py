@@ -6,6 +6,7 @@ import uvicorn
 import threading
 import html
 import base64
+import logging
 from utils.metadata import MetadataManager
 
 if not os.path.exists("static"):
@@ -24,7 +25,6 @@ server_queues = {}
 now_playing = {}
 
 def encode_image_as_base64(image_path):
-    """Helper function to read an image file and return its base64 encoding."""
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
@@ -69,7 +69,8 @@ async def list_queues():
     """
 
     for guild_id in server_queues.keys():
-        encoded_image = encode_image_as_base64(os.path.join("/static/", f"{str(guild_id)}.png"))
+        logging.info(f"Processing guild ID: {guild_id}")
+        encoded_image = encode_image_as_base64(os.path.join("app","static", f"{str(guild_id)}.png"))
         html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="data:image/png;base64,{encoded_image}" alt="{str(guild_id)}" /></button>'
 
     html_content += "</div>"
@@ -96,6 +97,7 @@ async def list_queues():
             """
             if song[2]:
                 album_art_path = song[2][4:]
+                logging.info(f"Album art path: {album_art_path}")
                 album_art_base64 = encode_image_as_base64(album_art_path)
                 html_content += f'<img src="data:image/png;base64,{album_art_base64}" alt="Album Art">'
         
