@@ -14,8 +14,8 @@ if not os.path.exists("static"):
 
 app = FastAPI()
 
-static_dir = "/static")
-albumart_dir = "/albumart")
+static_dir = "/static"
+albumart_dir = "/albumart"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.mount("/albumart", StaticFiles(directory=albumart_dir), name="albumart")
 
