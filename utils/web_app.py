@@ -13,6 +13,10 @@ if not os.path.exists("static"):
     os.makedirs("static")
 
 app = FastAPI()
+static_dir = "/app/static"
+albumart_dir = "/app/albumart"
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+app.mount("/albumart", StaticFiles(directory=albumart_dir), name="albumart")
 
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
@@ -67,9 +71,9 @@ async def list_queues():
     """
 
     for guild_id in server_queues.keys():
-        logging.info(f"Processing guild ID: {guild_id}")
-        encoded_image = encode_image_as_base64(f"../static/{str(guild_id)}.png")
-        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="data:image/png;base64,{encoded_image}" alt="{str(guild_id)}" /></button>'
+        encoded_image = f"/static/{guild_id}.png"
+        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="{encoded_image}" alt="{str(guild_id)}" /></button>'
+
 
     html_content += "</div>"
 
@@ -94,10 +98,9 @@ async def list_queues():
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
             if song[2]:
-                album_art_path = f"../{song[2][4:]}"
-                logging.info(f"Album art path: {album_art_path}")
-                album_art_base64 = encode_image_as_base64(album_art_path)
-                html_content += f'<img src="data:image/png;base64,{album_art_base64}" alt="Album Art">'
+                html_content += f'<img src="/albumart/{song[2][4:]}" alt="Album Art">'
+            else:
+                html_content += f'<img src="/albumart/default.jpg" alt="Default Album Art">'
         
         html_content += """
         <h3>Upcoming Tracks:</h3>
