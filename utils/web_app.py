@@ -68,7 +68,7 @@ async def list_queues():
 
     for guild_id in server_queues.keys():
         logging.info(f"Processing guild ID: {guild_id}")
-        encoded_image = encode_image_as_base64(f"../static/{str(guild_id)}.png"))
+        encoded_image = encode_image_as_base64(f"../static/{str(guild_id)}.png")
         html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="data:image/png;base64,{encoded_image}" alt="{str(guild_id)}" /></button>'
 
     html_content += "</div>"
