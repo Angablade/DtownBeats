@@ -72,7 +72,7 @@ async def list_queue_for_guild(guild_id: str):
         <p><b>ID:</b> {html.escape(song[0])}</p>
         """
         if song[2]:
-            html_content += f'<img src="/albumart/{song[2][4:]}" alt="Album Art">'
+            html_content += f'<img src="{song[2][4:]}" alt="Album Art">'
         else:
             html_content += f'<img src="/albumart/default.jpg" alt="Default Album Art">'
     
