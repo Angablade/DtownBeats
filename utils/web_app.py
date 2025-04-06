@@ -29,7 +29,7 @@ def encode_image_as_base64(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
-@app.get("/queues/{guild_id}", response_class=HTMLResponse)
+@app.get(f"/queues/{guild_id}", response_class=HTMLResponse)
 async def list_queue_for_guild(guild_id: str):
     if guild_id not in server_queues:
         return HTMLResponse(content=f"<h1>No queue found for Guild ID: {guild_id}</h1>", status_code=404)
