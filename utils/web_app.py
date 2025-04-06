@@ -69,7 +69,7 @@ async def list_queues():
     """
 
     for guild_id in server_queues.keys():
-        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="/static/{str(guild_id)}.png" alt="{str(guild_id)}" /></button>'
+        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="{encode_image_as_base64("/static/{str(guild_id)}.png")}" alt="{str(guild_id)}" /></button>'
 
     html_content += "</div>"
 
@@ -94,8 +94,7 @@ async def list_queues():
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
             if song[2]:
-                # Replace the image link with the base64 encoded image
-                album_art_path = song[2][4:]  # Assuming path starts with "/albumart/"
+                album_art_path = song[2][4:]
                 album_art_base64 = encode_image_as_base64(album_art_path)
                 html_content += f'<img src="data:image/png;base64,{album_art_base64}" alt="Album Art">'
         
