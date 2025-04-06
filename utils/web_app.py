@@ -13,8 +13,10 @@ if not os.path.exists("static"):
     os.makedirs("static")
 
 app = FastAPI()
-static_dir = "/app/static"
-albumart_dir = "/app/albumart"
+static_dir = "../static"   # Going up one level from utils to access the static folder
+albumart_dir = "../albumart"  # Going up one level from utils to access the albumart folder
+
+# Mounting the static and albumart folders
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.mount("/albumart", StaticFiles(directory=albumart_dir), name="albumart")
 
