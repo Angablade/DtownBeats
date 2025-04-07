@@ -32,7 +32,7 @@ server_queues = {}
 now_playing = {}
 track_history = {}
 
-@app.get("/queues/{guild_id}", response_class=HTMLResponse)
+@app.get("/queue/{guild_id}", response_class=HTMLResponse)
 async def list_queue_for_guild(guild_id: str):
     logging.info(f"Fetching queue for Guild ID: {guild_id}")
     if guild_id not in server_queues.keys():
@@ -129,7 +129,7 @@ async def list_queue_for_guild(guild_id: str):
 
     return HTMLResponse(content=html_content)
 
-@app.get("/queues/{guild_id}/json")
+@app.get("/queue/{guild_id}/json")
 async def queue_json_for_guild(guild_id: str):
     if guild_id not in server_queues:
         return JSONResponse(
