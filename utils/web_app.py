@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
 import uvicorn
 import threading
@@ -16,26 +16,30 @@ albumart_dir = "/app/albumart"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.mount("/albumart", StaticFiles(directory=albumart_dir), name="albumart")
 
-
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
 MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
 MUSICBRAINZ_CONTACT = os.getenv("MUSICBRAINZ_CONTACT", "default@example.com")
-metadata_manager = MetadataManager("./metacache","./config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
+
+metadata_manager = MetadataManager(
+    "./metacache",
+    "./config/metadataeditors.json",
+    MUSICBRAINZ_USERAGENT,
+    MUSICBRAINZ_VERSION,
+    MUSICBRAINZ_CONTACT
+)
 
 server_queues = {}
 now_playing = {}
-
-def encode_image_as_base64(image_path):
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
+track_history = {}
 
 @app.get("/queues/{guild_id}", response_class=HTMLResponse)
 async def list_queue_for_guild(guild_id: str):
     logging.info(f"Fetching queue for Guild ID: {guild_id}")
-    if guild_id not in server_queues:
+    if guild_id not in server_queues.keys():
         logging.warning(f"No queue found for Guild ID: {guild_id}")
-        return HTMLResponse(content=f"<h1>No queue found for Guild ID: {guild_id}</h1>", status_code=404)
-
+        return HTMLResponse(
+            content=f"<h1>No queue found for Guild ID: {guild_id}</h1>", status_code=404
+        )
 
     html_content = f"""
     <html>
@@ -70,7 +74,7 @@ async def list_queue_for_guild(guild_id: str):
         duration = metadata.get("duration", "Unknown")
 
         html_content += f"""
-        <h2>Now Playing: {html.escape(artist)} - {html.escape(title)}</h2>
+        <h2>Last Played: {html.escape(artist)} - {html.escape(title)}</h2>
         <p><b>Length:</b> {html.escape(str(duration))}</p>
         <p><b>ID:</b> {html.escape(song[0])}</p>
         """
@@ -101,12 +105,66 @@ async def list_queue_for_guild(guild_id: str):
         </tr>
         """
     
-    html_content += """
-    </table>
-    </body>
-    </html>
-    """
+    html_content += "</table>"
+
+    if guild_id in track_history:
+        history = track_history[guild_id]
+        html_content += "<h3>Track History:</h3>"
+        html_content += "<table><tr><th>#</th><th>Track ID</th><th>Title</th></tr>"
+        
+        for index, item in enumerate(history, start=1):
+            track_id = html.escape(str(item[0]))
+            title = html.escape(str(item[1]))
+            html_content += f"""
+            <tr>
+              <td>{index}</td>
+              <td>{track_id}</td>
+              <td>{title}</td>
+            </tr>
+            """
+        
+        html_content += "</table>"
+
+    html_content += """</body></html>"""
+
     return HTMLResponse(content=html_content)
+
+@app.get("/queues/{guild_id}/json")
+async def queue_json_for_guild(guild_id: str):
+    if guild_id not in server_queues:
+        return JSONResponse(
+            content={"error": f"No queue found for Guild ID: {guild_id}"}, status_code=404
+        )
+    
+    response = {
+        "last_played": now_playing.get(guild_id, None),
+        "queue": [{"track_id": item[0], "title": item[1]} for item in server_queues[guild_id]._queue],
+        "history": track_history.get(guild_id, [])
+    }
+    return JSONResponse(content=response)
+
+@app.get("/queues/json")
+async def all_queues_json():
+    response = {}
+    
+    for guild_id, queue in server_queues.items():
+        last_played = now_playing.get(guild_id, None)
+        
+        metadata = metadata_manager.load_metadata(last_played[0]) if last_played else {}
+        track_info = {
+            "artist": metadata.get("artist", "Unknown"),
+            "title": metadata.get("title", "Unknown"),
+            "duration": metadata.get("duration", "Unknown"),
+            "track_id": last_played[0] if last_played else None
+        }
+        
+        response[guild_id] = {
+            "last_played": track_info,
+            "queue": [{"track_id": item[0], "title": item[1]} for item in queue._queue],
+            "history": track_history.get(guild_id, [])
+        }
+
+    return JSONResponse(content=response)
 
 @app.get("/queues", response_class=HTMLResponse)
 async def list_queues():
@@ -156,6 +214,7 @@ async def list_queues():
 
     for guild_id, queue in server_queues.items():
         html_content += f'<div id="tab-{guild_id}" class="tabcontent">'
+        
         if guild_id in now_playing:
             song = now_playing[guild_id]
             
@@ -170,7 +229,7 @@ async def list_queues():
             duration = metadata.get("duration", "Unknown")
 
             html_content += f"""
-            <h2>Now Playing: {html.escape(artist)} - {html.escape(title)}</h2>
+            <h2>Last played: {html.escape(artist)} - {html.escape(title)}</h2>
             <p><b>Length:</b> {html.escape(str(duration))}</p>
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
@@ -179,15 +238,8 @@ async def list_queues():
             else:
                 html_content += f'<img src="/albumart/default.jpg" alt="Default Album Art">'
         
-        html_content += """
-        <h3>Upcoming Tracks:</h3>
-        <table>
-          <tr>
-            <th>#</th>
-            <th>Track ID</th>
-            <th>Title</th>
-          </tr>
-        """
+        html_content += "<h3>Upcoming Tracks:</h3><table><tr><th>#</th><th>Track ID</th><th>Title</th></tr>"
+        
         for index, item in enumerate(queue._queue, start=1):
             track_id = html.escape(str(item[0]))
             title = html.escape(str(item[1]))
@@ -198,8 +250,28 @@ async def list_queues():
               <td>{title}</td>
             </tr>
             """
-        html_content += "</table></div>"
+        
+        html_content += "</table>"
 
+        if guild_id in track_history:
+            history = track_history[guild_id]
+            html_content += "<h3>Track History:</h3><table><tr><th>#</th><th>Track ID</th><th>Title</th></tr>"
+            
+            for index, item in enumerate(history, start=1):
+                track_id = html.escape(str(item[0]))
+                title = html.escape(str(item[1]))
+                html_content += f"""
+                <tr>
+                  <td>{index}</td>
+                  <td>{track_id}</td>
+                  <td>{title}</td>
+                </tr>
+                """
+            
+            html_content += "</table>"
+
+        html_content += "</div>"
+    
     html_content += """
         <script>
           document.getElementsByClassName("tablinks")[0]?.click(); // Auto-open the first tab
@@ -209,14 +281,13 @@ async def list_queues():
     """
     return HTMLResponse(content=html_content)
 
-
-
 def run_web_app():
     uvicorn.run(app, host="0.0.0.0", port=80)
 
-def start_web_server_in_background(queues, now_playing_songs):
-    global server_queues, now_playing
+def start_web_server_in_background(queues, now_playing_songs, track_historys):
+    global server_queues, now_playing, track_history
     server_queues = queues
     now_playing = now_playing_songs
+    track_history = track_historys
     thread = threading.Thread(target=run_web_app, daemon=True)
     thread.start()

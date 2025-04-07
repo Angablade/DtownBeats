@@ -633,7 +633,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 async def on_ready():
     try:
         from utils.web_app import start_web_server_in_background
-        start_web_server_in_background(server_queues, now_playing)
+        start_web_server_in_background(server_queues, now_playing, track_history)
         logging.error(f"Bot is ready! Logged in as {bot.user}")
         for guild in bot.guilds:
                 file_path = os.path.join('static', f"{guild.id}.png")
