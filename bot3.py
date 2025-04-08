@@ -602,7 +602,7 @@ async def play_next(ctx, voice_client):
         bot.intentional_disconnections[guild_id] = False
 
 
-async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0, is_reconnecting = false):
+async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0, is_reconnecting = False):
     guild_id = ctx.guild.id
 
     if is_banned_title(video_title):
