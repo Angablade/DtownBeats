@@ -272,13 +272,7 @@ async def check_perms(ctx, guild_id):
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member == bot.user:
-        if before.channel is not None:
-            guild = before.channel.guild
-        elif after.channel is not None:
-            guild = after.channel.guild
-        else:
-            return
-
+        guild = before.channel.guild if before.channel else after.channel.guild
         guild_id = guild.id
 
         try:
@@ -294,20 +288,18 @@ async def on_voice_state_update(member, before, after):
             bot.timeout_tasks[guild_id].cancel()
 
         if before.channel is None and after.channel is not None:
-            bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(after.channel.guild))
+            bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(guild))
 
             if guild_id in current_tracks and "paused_position" in current_tracks[guild_id]:
-                paused_position = current_tracks.get(guild_id, {}).get("paused_position")
-                current_track = current_tracks.get(guild_id, {}).get("current_track")
-                logging.error(f"Resuming track '{current_track[1]}' from position {paused_position} seconds for guild {guild_id}.")
+                paused_position = current_tracks[guild_id].get("paused_position", 0)
+                logging.error(f"Resuming track from position {paused_position} for guild {guild_id}.")
                 try:
-                    asyncio.create_task(resume_playback(guild, paused_position))
+                    asyncio.create_task(handle_resume_on_reconnect(guild, after.channel))
                 except Exception:
                     logging.exception("Failed to resume on reconnect")
 
-        if before.channel is not None and after.channel is None:
-            intentional_disconnection = bot.intentional_disconnections.get(guild_id, False)
-            if not intentional_disconnection:
+        elif before.channel is not None and after.channel is None:
+            if not bot.intentional_disconnections.get(guild_id, False):
                 logging.error("Bot got disconnected from voice channel unexpectedly. Pausing playback...")
                 paused_position = get_current_elapsed_time(guild_id)
                 current_tracks.setdefault(guild_id, {})["paused_position"] = paused_position
@@ -315,25 +307,36 @@ async def on_voice_state_update(member, before, after):
             else:
                 bot.intentional_disconnections[guild_id] = False
 
-    await asyncio.sleep(1)
-
-
 async def handle_resume_on_reconnect(guild, voice_channel):
     await asyncio.sleep(2)
+
     guild_id = guild.id
     try:
+        if guild.voice_client:
+            await guild.voice_client.disconnect(force=True)
+
         voice_client = await voice_channel.connect()
-        paused_position = current_tracks.get(guild_id, {}).get("paused_position", 0)
+
+        paused_position = current_tracks.get(guild_id, {}).get("paused_position") or 0
         audio_file = retrieve_audio_file_for_current_track(guild_id)
-        if audio_file is None:
+
+        if not audio_file:
             logging.error("No audio file found to resume playback.")
             return
+
         video_id, video_title = current_tracks.get(guild_id, {}).get("current_track", (None, "Unknown Title"))
         logging.error(f"Resuming track '{video_title}' from position {paused_position} seconds for guild {guild_id}.")
-        await play_audio_in_thread(voice_client, audio_file, guild, video_title, video_id, start_offset=paused_position)
+
+        await play_audio_in_thread(
+            voice_client, audio_file, guild,
+            video_title, video_id,
+            start_offset=paused_position
+        )
+
         current_tracks[guild_id]["paused_position"] = 0
-    except Exception as e:
-        logging.error(f"Failed to resume on reconnect: {e}")
+
+    except Exception:
+        logging.exception("Failed to resume on reconnect")
 
 @bot.event
 async def on_guild_join(guild):
