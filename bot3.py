@@ -327,17 +327,37 @@ async def handle_resume_on_reconnect(guild, voice_channel):
         video_id, video_title = current_tracks.get(guild_id, {}).get("current_track", (None, "Unknown Title"))
         logging.error(f"Resuming track '{video_title}' from position {paused_position} seconds for guild {guild_id}.")
 
+
+
         await play_audio_in_thread(
-            voice_client, audio_file, guild_id,
+            voice_client, audio_file, get_ctx_from_guild(guild),
             video_title, video_id,
             start_offset=paused_position,
-            is_reconnecting=True
+            is_reconnecting=True, 
         )
 
         current_tracks[guild_id]["paused_position"] = 0
 
     except Exception:
         logging.exception("Failed to resume on reconnect")
+
+async def get_ctx_from_guild(guild: discord.Guild):
+    if not guild:
+        return None
+    channel = guild.system_channel or (guild.text_channels[0] if guild.text_channels else None)
+    if not channel:
+        return None
+    message = discord.Message(
+          channel=channel,
+          data={"id": 0, "type": 0, "content": "", "author": bot.user.to_dict()},
+          state=bot._connection,
+          )
+    ctx = await bot.get_context(message)
+    try:
+        await message.delete()
+    except discord.errors.NotFound:
+         pass
+    return ctx
 
 @bot.event
 async def on_guild_join(guild):
@@ -583,10 +603,7 @@ async def play_next(ctx, voice_client):
 
 
 async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0, is_reconnecting = false):
-    if is_reconnecting:
-       guild_id = ctx.id
-    else:
-        guild_id = ctx.guild.id
+    guild_id = ctx.guild.id
 
     if is_banned_title(video_title):
         await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
