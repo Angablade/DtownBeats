@@ -272,7 +272,6 @@ async def check_perms(ctx, guild_id):
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member == bot.user:
-        # Get the guild ID safely from before or after
         if before.channel is not None:
             guild = before.channel.guild
         elif after.channel is not None:
