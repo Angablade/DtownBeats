@@ -328,9 +328,10 @@ async def handle_resume_on_reconnect(guild, voice_channel):
         logging.error(f"Resuming track '{video_title}' from position {paused_position} seconds for guild {guild_id}.")
 
         await play_audio_in_thread(
-            voice_client, audio_file, guild,
+            voice_client, audio_file, guild_id,
             video_title, video_id,
-            start_offset=paused_position
+            start_offset=paused_position,
+            is_reconnecting=True
         )
 
         current_tracks[guild_id]["paused_position"] = 0
@@ -581,8 +582,12 @@ async def play_next(ctx, voice_client):
         bot.intentional_disconnections[guild_id] = False
 
 
-async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0):
-    guild_id = ctx.guild.id
+async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0, is_reconnecting = false):
+    if is_reconnecting:
+       guild_id = ctx.id
+    else:
+        guild_id = ctx.guild.id
+
     if is_banned_title(video_title):
         await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
         raise ValueError("Out of bounds error: This content is not allowed.")
