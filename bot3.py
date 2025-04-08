@@ -297,9 +297,9 @@ async def on_voice_state_update(member, before, after):
             bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(after.channel.guild))
 
             if guild_id in current_tracks and "paused_position" in current_tracks[guild_id]:
-                paused_position = current_tracks[guild_id].pop("paused_position")
-                track = current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
-                logging.error(f"Resuming track '{track[1]}' from position {paused_position} seconds for guild {guild_id}.")
+                paused_position = current_tracks.get(guild_id, {}).get("paused_position")
+                current_track = current_tracks.get(guild_id, {}).get("current_track")
+                logging.error(f"Resuming track '{current_track[1]}' from position {paused_position} seconds for guild {guild_id}.")
                 try:
                     asyncio.create_task(resume_playback(guild, paused_position))
                 except Exception:
