@@ -332,7 +332,7 @@ async def handle_resume_on_reconnect(guild, voice_channel):
         await play_audio_in_thread(
             voice_client, audio_file, get_ctx_from_guild(guild),
             video_title, video_id,
-            start_offset=paused_position,
+            start_offset=paused_position
         )
 
         current_tracks[guild_id]["paused_position"] = 0
