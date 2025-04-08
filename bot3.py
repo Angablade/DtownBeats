@@ -301,9 +301,8 @@ async def on_voice_state_update(member, before, after):
                 bot.intentional_disconnections[guild_id] = False
     await asyncio.sleep(1)
 
-
 async def handle_resume_on_reconnect(guild, voice_channel):
-    await asyncio.sleep(2) 
+    await asyncio.sleep(2)
     guild_id = guild.id
     try:
         voice_client = await voice_channel.connect()
@@ -561,7 +560,8 @@ async def play_next(ctx, voice_client):
 
         bot.intentional_disconnections[guild_id] = False
 
-async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id):
+
+async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0):
     guild_id = ctx.guild.id
     if is_banned_title(video_title):
         await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
@@ -581,7 +581,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     file = discord.File(image_path, filename="album_art.jpg")
 
-    logging.info(f"Playing: {title} by {artist}")
+    logging.error(f"Playing: {title} by {artist}")
     embed = discord.Embed(
         title="Now Playing",
         description=f"**{title}**",
@@ -590,13 +590,21 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     embed.set_thumbnail(url="attachment://album_art.jpg")
     embed.add_field(name="Artist", value=artist, inline=True)
     try:
-        embed.add_field(name="Duration", value=f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
-    except Exception as e:
+        embed.add_field(
+            name="Duration",
+            value=(f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown"),
+            inline=True
+        )
+    except Exception:
         try:
             duration = int(metadata_manager.ffmpeg_get_track_length(audio_file))
-            embed.add_field(name="Duration", value=f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
-        except Exception as e:
-            Embed.add_field(name="Duration", value="Unknown", inline=True)
+            embed.add_field(
+                name="Duration",
+                value=(f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown"),
+                inline=True
+            )
+        except Exception:
+            embed.add_field(name="Duration", value="Unknown", inline=True)
     embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
 
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
