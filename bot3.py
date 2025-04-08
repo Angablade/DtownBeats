@@ -333,7 +333,6 @@ async def handle_resume_on_reconnect(guild, voice_channel):
             voice_client, audio_file, get_ctx_from_guild(guild),
             video_title, video_id,
             start_offset=paused_position,
-            is_reconnecting=True, 
         )
 
         current_tracks[guild_id]["paused_position"] = 0
@@ -602,7 +601,7 @@ async def play_next(ctx, voice_client):
         bot.intentional_disconnections[guild_id] = False
 
 
-async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0, is_reconnecting = False):
+async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0):
     guild_id = ctx.guild.id
 
     if is_banned_title(video_title):
