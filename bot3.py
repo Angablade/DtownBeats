@@ -269,50 +269,55 @@ async def check_perms(ctx, guild_id):
 
     return True
 
-
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member == bot.user:
-
-        if before.channel is None:
-            return
-
         guild_id = before.channel.guild.id
         try:
             if guild_id in guild_volumes:
                 if before.channel.guild.voice_client:
-                    before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(before.channel.guild.voice_client.source)
+                    before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(
+                        before.channel.guild.voice_client.source
+                    )
                     before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
         except Exception as e:
             pass
 
         if guild_id in bot.timeout_tasks:
             bot.timeout_tasks[guild_id].cancel()
-        
+
         if before.channel is None and after.channel is not None:
             bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(after.channel.guild))
 
         if before.channel is not None and after.channel is None:
-            if guild_id in bot.intentional_disconnections:
-                intentional_disconnection = bot.intentional_disconnections[guild_id]
-            else:
-                intentional_disconnection = False
-
+            intentional_disconnection = bot.intentional_disconnections.get(guild_id, False)
             if not intentional_disconnection:
-                logging.error("Bot got disconnected from voice channel. Attempting to reconnect...")
-                await asyncio.sleep(5)
-                guild = before.channel.guild
-                voice_channel = discord.utils.get(guild.voice_channels, id=before.channel.id)
-                if voice_channel:
-                    try:
-                        await voice_channel.connect()
-                        logging.error("Reconnected to voice channel successfully.")
-                    except Exception as e:
-                        logging.error(f"Failed to reconnect: {e}")
+                logging.error("Bot got disconnected from voice channel unexpectedly. Pausing playback...")
+                paused_position = get_current_elapsed_time(guild_id)
+                current_tracks.setdefault(guild_id, {})["paused_position"] = paused_position
+                logging.error(f"Paused track at {paused_position} seconds for guild {guild_id}.")
+                asyncio.create_task(handle_resume_on_reconnect(before.channel.guild, before.channel))
             else:
                 bot.intentional_disconnections[guild_id] = False
     await asyncio.sleep(1)
 
+
+async def handle_resume_on_reconnect(guild, voice_channel):
+    await asyncio.sleep(2) 
+    guild_id = guild.id
+    try:
+        voice_client = await voice_channel.connect()
+        paused_position = current_tracks.get(guild_id, {}).get("paused_position", 0)
+        audio_file = retrieve_audio_file_for_current_track(guild_id)
+        if audio_file is None:
+            logging.error("No audio file found to resume playback.")
+            return
+        video_id, video_title = current_tracks.get(guild_id, {}).get("current_track", (None, "Unknown Title"))
+        logging.error(f"Resuming track '{video_title}' from position {paused_position} seconds for guild {guild_id}.")
+        await play_audio_in_thread(voice_client, audio_file, guild, video_title, video_id, start_offset=paused_position)
+        current_tracks[guild_id]["paused_position"] = 0
+    except Exception as e:
+        logging.error(f"Failed to resume on reconnect: {e}")
 
 @bot.event
 async def on_guild_join(guild):
@@ -576,7 +581,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     file = discord.File(image_path, filename="album_art.jpg")
 
-    logging.error(f"Playing: {title} by {artist}")
+    logging.info(f"Playing: {title} by {artist}")
     embed = discord.Embed(
         title="Now Playing",
         description=f"**{title}**",
@@ -597,12 +602,15 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     await messagesender(bot, ctx.channel.id, embed=embed, file=file)
 
     current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
+    current_tracks[guild_id]["start_time"] = time.time() - start_offset
+    current_tracks[guild_id]["audio_file"] = audio_file
     update_now_playing(guild_id, video_id, video_title, image_path)
 
     def playback():
         try:
             logging.error(f"Playing: {title} by {artist} in thread")
-            source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options="-bufsize 10m -ss 00:00:00")
+            seek_option = f"-ss {start_offset}" if start_offset > 0 else "-ss 00:00:00"
+            source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options=f"-bufsize 10m {seek_option}")
             volume_level = guild_volumes.get(guild_id, 100) / 100
             source = discord.PCMVolumeTransformer(source, volume=volume_level)
             voice_client.play(source, after=lambda e: logging.error(f"Playback finished: {e}") if e else None)
@@ -628,6 +636,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     while voice_client.is_playing():
         await asyncio.sleep(1)
+
 
 @bot.event
 async def on_ready():
@@ -894,6 +903,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
             metadata_manager.save_metadata(video_id, metadata)
             video_id = f"|{video_id}"
 
+
         await server_queues[guild_id].put([video_id, video_title])
         await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
 
@@ -909,6 +919,24 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
 
     except Exception as e:
         await messagesender(bot, ctx.channel.id, f"Error adding to queue: {e}")
+
+def get_current_elapsed_time(guild_id: int) -> int:
+    """
+    Returns the elapsed playback time (in seconds) for the current track in the guild.
+    """
+    track_state = current_tracks.get(guild_id, {})
+    start_time = track_state.get("start_time")
+    if start_time is None:
+        return 0
+    return int(time.time() - start_time)
+
+def retrieve_audio_file_for_current_track(guild_id: int) -> str:
+    """
+    Returns the stored audio file path for the current track in the guild.
+    """
+    track_state = current_tracks.get(guild_id, {})
+    return track_state.get("audio_file", None)
+
 
 @bot.command(name="skip", aliases=["next"])
 async def skip(ctx):
