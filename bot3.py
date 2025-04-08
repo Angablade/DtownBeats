@@ -272,22 +272,38 @@ async def check_perms(ctx, guild_id):
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member == bot.user:
-        guild_id = before.channel.guild.id
+        # Get the guild ID safely from before or after
+        if before.channel is not None:
+            guild = before.channel.guild
+        elif after.channel is not None:
+            guild = after.channel.guild
+        else:
+            return
+
+        guild_id = guild.id
+
         try:
             if guild_id in guild_volumes:
-                if before.channel.guild.voice_client:
-                    before.channel.guild.voice_client.source = discord.PCMVolumeTransformer(
-                        before.channel.guild.voice_client.source
-                    )
-                    before.channel.guild.voice_client.source.volume = guild_volumes[guild_id] / 100
-        except Exception as e:
-            pass
+                voice_client = guild.voice_client
+                if voice_client and voice_client.source:
+                    voice_client.source = discord.PCMVolumeTransformer(voice_client.source)
+                    voice_client.source.volume = guild_volumes[guild_id] / 100
+        except Exception:
+            logging.exception("Error setting volume after voice state update")
 
         if guild_id in bot.timeout_tasks:
             bot.timeout_tasks[guild_id].cancel()
 
         if before.channel is None and after.channel is not None:
             bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(after.channel.guild))
+
+            if guild_id in current_tracks and "paused_position" in current_tracks[guild_id]:
+                paused_position = current_tracks[guild_id].pop("paused_position")
+                logging.error(f"Resuming track '{current_tracks[guild_id]['title']}' from position {paused_position} seconds for guild {guild_id}.")
+                try:
+                    asyncio.create_task(resume_playback(guild, paused_position))
+                except Exception:
+                    logging.exception("Failed to resume on reconnect")
 
         if before.channel is not None and after.channel is None:
             intentional_disconnection = bot.intentional_disconnections.get(guild_id, False)
@@ -296,10 +312,11 @@ async def on_voice_state_update(member, before, after):
                 paused_position = get_current_elapsed_time(guild_id)
                 current_tracks.setdefault(guild_id, {})["paused_position"] = paused_position
                 logging.error(f"Paused track at {paused_position} seconds for guild {guild_id}.")
-                asyncio.create_task(handle_resume_on_reconnect(before.channel.guild, before.channel))
             else:
                 bot.intentional_disconnections[guild_id] = False
+
     await asyncio.sleep(1)
+
 
 async def handle_resume_on_reconnect(guild, voice_channel):
     await asyncio.sleep(2)
