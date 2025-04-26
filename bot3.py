@@ -329,12 +329,12 @@ async def handle_resume_on_reconnect(guild, voice_channel):
 
 
 
+        ctx = await get_ctx_from_guild(guild)
         await play_audio_in_thread(
-            voice_client, audio_file, get_ctx_from_guild(guild),
+            voice_client, audio_file, ctx,
             video_title, video_id,
             start_offset=paused_position
         )
-
         current_tracks[guild_id]["paused_position"] = 0
 
     except Exception:
@@ -1206,6 +1206,38 @@ async def dockboot(ctx):
         os._exit(0)  
     else:
         await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
+
+@bot.command(name="say")
+async def say(ctx, guild_id: int, channel_id: int, *, message: str):
+    """
+    Makes the bot send a specified message in a given channel from a given server.
+    Only available via DM from the bot owner.
+    Usage: say <guild_id> <channel_id> "<message>"
+    """
+    if ctx.guild is not None:
+        await ctx.send("❌ This command can only be used in DMs.")
+        return
+
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("❌ You are not authorized to use this command.")
+        return
+
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        await ctx.send("❌ Could not find the specified guild.")
+        return
+
+    channel = guild.get_channel(channel_id)
+    if channel is None:
+        await ctx.send("❌ Could not find the specified channel in the given guild.")
+        return
+
+    try:
+        await channel.send(message)
+        await ctx.send("✅ Message sent successfully.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to send message: {e}")
+
 
 @bot.command(name="seek")
 async def seek(ctx, position: str):
@@ -2248,6 +2280,28 @@ async def set_metadata(ctx, filename: str, key: str, value: str):
         return
     metadata_manager.update_metadata(filename, key, value)
     await ctx.send(f"Updated {key} in {filename}.")
+
+@bot.command(name="clean")
+async def clean_file(ctx, ID: str):
+    if ctx.author.id not in metadata_manager.editor_ids:
+        await ctx.send("❌ You do not have permission to clean this ID.")
+        return
+
+    file_path = f"music/{ID}"
+    if not os.path.exists(file_path):
+        file_path = f"music/{ID}.mp3"
+    if not os.path.exists(file_path):
+        file_path = f"music/{ID}.opus"
+    if not os.path.exists(file_path):
+        await ctx.send(f"❌ File not found for ID: {ID}")
+        return
+
+    try:
+        os.remove(file_path)
+        await ctx.send(f"✅ Cleaned {ID} from database.")
+    except Exception as e:
+        await ctx.send(f"❌ An error occurred while cleaing ID: {e}")
+
 
 @bot.command(name="addeditor")
 async def add_editor(ctx, user: discord.User):
