@@ -665,6 +665,12 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
             voice_client.play(source, after=lambda e: logging.error(f"Playback finished: {e}") if e else None)
         except Exception as e:
             logging.error(f"Error during playback: {e}")
+    
+    if not audio_file or not os.path.exists(audio_file):
+        logging.error(f"[Playback Error] Audio file not found: {audio_file}")
+        await messagesender(bot, ctx.channel.id, content="❌ Failed to play the track. Skipping...")
+        await play_next_in_queue(ctx)
+        return
 
     await asyncio.to_thread(playback)
 
@@ -2318,6 +2324,33 @@ async def remove_editor(ctx, user: discord.User):
         return
     metadata_manager.remove_editor(user.id)
     await ctx.send(f"Removed {user.mention} from metadata editors.")
+
+@bot.command(name="updateyt")
+async def update_yt_dlp(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("You do not have permission to modify editors.")
+        return
+
+    await messagesender(bot, ctx.channel.id, content="🔄 Updating yt-dlp...")
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "yt-dlp", "-U",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode == 0:
+            output = stdout.decode().strip()
+            await messagesender(bot, ctx.channel.id, content=f"✅ yt-dlp updated successfully:\n```\n{output}\n```")
+        else:
+            error = stderr.decode().strip()
+            await messagesender(bot, ctx.channel.id, content=f"❌ yt-dlp update failed:\n```\n{error}\n```")
+
+    except Exception as e:
+        logging.exception("Failed to update yt-dlp")
+        await messagesender(bot, ctx.channel.id, content=f"❌ An error occurred: {str(e)}")
 
 
 bot.run(BOT_TOKEN)
