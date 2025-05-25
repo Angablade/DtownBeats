@@ -44,17 +44,34 @@ async def spotify_to_youtube(url: str):
         logging.error(f"❌ Error fetching YouTube search results: {e}")
         return None
 
-async def get_spotify_tracks_from_playlist(url):
-    """Extracts all track URLs from a Spotify playlist page."""
-    try:
-        headers_with_host = headers.copy()
-        headers_with_host.update({"Host": "open.spotify.com"})
-        response = requests.get(url, headers=headers_with_host)
-        response.raise_for_status()
-        return list(set(re.findall(r'https://open\.spotify\.com/track/[\w]+', response.text)))
-    except requests.RequestException as e:
-        logging.error(f"Error fetching playlist: {e}")
-        return []
+async def get_spotify_tracks_from_playlist(url, max_retries=3):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Host": "open.spotify.com",
+    }
+    session = Session()
+    session.headers.update(headers)
+    track_urls = set()
+    previous_tracks = set()
+    for attempt in range(max_retries):
+        try:
+            response = session.get(url)
+            response.raise_for_status()
+            html = response.text
+            new_tracks = set(re.findall(r'https://open\.spotify\.com/track/[\w]+', html))
+            if new_tracks - previous_tracks:
+                track_urls.update(new_tracks)
+                previous_tracks = new_tracks
+                logging.info(f"Found {len(new_tracks)} new tracks on attempt {attempt + 1}. Total tracks: {len(track_urls)}")
+            else:
+                logging.warning(f"No new tracks found on attempt {attempt + 1}.  Stopping retries.")
+                break
+            time.sleep(3)
+        except Exception as e:
+            logging.error(f"Error fetching playlist (attempt {attempt + 1}): {e}")
+            return []
+    return list(track_urls)
 
 async def get_spotify_title(url):
     """Fetches the title and artist from a Spotify track URL."""

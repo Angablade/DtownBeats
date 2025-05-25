@@ -1895,7 +1895,6 @@ async def spotify(ctx, url: str):
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
             try:
                 track_urls = await get_spotify_tracks_from_playlist(url)
-                logging.log(track_urls)
                 if not track_urls:
                     await messagesender(bot, ctx.channel.id, "❌ Failed to retrieve tracks from Spotify playlist.")
                     return
