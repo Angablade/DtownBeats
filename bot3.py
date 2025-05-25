@@ -2331,26 +2331,33 @@ async def update_yt_dlp(ctx):
         await ctx.send("You do not have permission to modify editors.")
         return
 
-    await messagesender(bot, ctx.channel.id, content="🔄 Updating yt-dlp...")
-
+    await messagesender(bot, ctx.channel.id, content="🔄 Updating pip and yt-dlp...")
     try:
-        process = await asyncio.create_subprocess_exec(
-            "yt-dlp", "-U",
+        # Step 1: Upgrade pip
+        pip_proc = await asyncio.create_subprocess_exec(
+            "python3", "-m", "pip", "install", "--upgrade", "pip",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await process.communicate()
+        await pip_proc.communicate()
 
-        if process.returncode == 0:
+        # Step 2: Upgrade yt-dlp
+        yt_proc = await asyncio.create_subprocess_exec(
+            "python3", "-m", "pip", "install", "--no-cache-dir", "--upgrade", "--force-reinstall", "yt-dlp",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await yt_proc.communicate()
+
+        if yt_proc.returncode == 0:
             output = stdout.decode().strip()
-            await messagesender(bot, ctx.channel.id, content=f"✅ yt-dlp updated successfully:\n```\n{output}\n```")
+            await messagesender(bot, ctx.channel.id, content=f"✅ yt-dlp updated:\n```\n{output}\n```")
         else:
             error = stderr.decode().strip()
-            await messagesender(bot, ctx.channel.id, content=f"❌ yt-dlp update failed:\n```\n{error}\n```")
+            await messagesender(bot, ctx.channel.id, content=f"❌ Update failed:\n```\n{error}\n```")
 
     except Exception as e:
-        logging.exception("Failed to update yt-dlp")
-        await messagesender(bot, ctx.channel.id, content=f"❌ An error occurred: {str(e)}")
+        await messagesender(bot, ctx.channel.id, content=f"❌ Error: {str(e)}")
 
 
 bot.run(BOT_TOKEN)
