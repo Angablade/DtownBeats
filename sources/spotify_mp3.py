@@ -47,28 +47,18 @@ async def spotify_to_youtube(url: str):
         logging.error(f"❌ Error fetching YouTube search results: {e}")
         return None
 
-async def get_spotify_tracks_from_playlist(url, max_retries=3):
+async def get_spotify_tracks_from_playlist(url):
     session = Session()
     session.headers.update(headers)
     track_urls = set()
-    previous_tracks = set()
-    for attempt in range(max_retries):
-        try:
-            response = session.get(url)
-            response.raise_for_status()
-            html = response.text
-            new_tracks = set(re.findall(SPOTIFY_TRACK_REGEX, html))
-            if new_tracks - previous_tracks:
-                track_urls.update(new_tracks)
-                previous_tracks = new_tracks
-                logging.info(f"Found {len(new_tracks)} new tracks on attempt {attempt + 1}. Total tracks: {len(track_urls)}")
-            else:
-                logging.warning(f"No new tracks found on attempt {attempt + 1}.  Stopping retries.")
-                break
-            time.sleep(5)
-        except Exception as e:
-            logging.error(f"Error fetching playlist (attempt {attempt + 1}): {e}")
-            return []
+    try:
+        response = session.get(url)
+        response.raise_for_status()
+        html = response.text
+        track_urls = set(re.findall(SPOTIFY_TRACK_REGEX, html))
+    except Exception as e:
+        logging.error(f"Error fetching playlist (attempt {attempt + 1}): {e}")
+        return []
     return list(track_urls)
 
 async def get_spotify_title(url):
