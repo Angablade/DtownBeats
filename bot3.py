@@ -497,7 +497,9 @@ async def messagesender(bot, channel_id, content=None, embed=None, command_messa
     if command_message:
         message_map[command_message.id] = messages
 
-
+async def run_blocking_in_executor(func, *args):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(executor, lambda: func(*args))
 
 def add_track_to_history(guild_id, video_id, video_title):
     if guild_id not in track_history:
