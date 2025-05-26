@@ -1,5 +1,4 @@
 import discord
-import discord
 import os
 import re
 import sys
@@ -1878,23 +1877,22 @@ async def soundcloud(ctx, url: str):
 async def spotify(ctx, url: str):
     async with ctx.typing():
         guild_id = ctx.guild.id
-        
+
         if not await check_perms(ctx, guild_id):
             return
-        
+
         if guild_id not in server_queues:
             server_queues[guild_id] = asyncio.Queue()
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
-        
+
         await handle_voice_connection(ctx)
-        
+
         track_urls = [url]
-                
 
         if "playlist" in url:
             await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
             try:
-                track_urls = await get_spotify_tracks_from_playlist(url)
+                track_urls = await run_blocking_in_executor(get_spotify_tracks_from_playlist, url)
 
                 if not track_urls:
                     await messagesender(bot, ctx.channel.id, "❌ Failed to retrieve tracks from Spotify playlist.")
@@ -1917,23 +1915,10 @@ async def spotify(ctx, url: str):
             bar = "█" * filled_length + "░" * (bar_length - filled_length)
             await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
 
-        async def process_track(track_url):
-            try:
-                logging.error(f"🔍 Converting track: {track_url}")
-                youtube_link = await spotify_to_youtube(track_url)
-                if not youtube_link:
-                    logging.error(f"❌ Failed to convert {track_url}")
-                    await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
-                    return None
+        def _download_sync(ydl_opts, url):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info("https://music.youtube.com/watch?v=" + url, download=True)
 
-                file_path = await download_audio(youtube_link)
-                spotify_title = await get_spotify_title(track_url)
-                return youtube_link, spotify_title
-
-            except Exception as e:
-                logging.error(f"⚠️ Error processing track {track_url}: {e}")
-                return None
-        
         async def download_audio(youtube_link):
             output_path = f"music/{youtube_link}.mp3"
             ydl_opts = {
@@ -1946,22 +1931,34 @@ async def spotify(ctx, url: str):
                 }],
                 'outtmpl': f'music/%(id)s',
             }
-        
+
             try:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, _download_sync, ydl_opts, youtube_link)
+                await run_blocking_in_executor(_download_sync, ydl_opts, youtube_link)
                 return output_path
             except Exception as e:
-                logging.error(f"Error downloading {codec} format from {youtube_link}: {e}")
+                logging.error(f"Error downloading mp3 format from {youtube_link}: {e}")
                 return False
-        
-        def _download_sync(ydl_opts, url):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.extract_info("https://music.youtube.com/watch?v=" + url, download=True)
-        
+
+        async def process_track(track_url):
+            try:
+                logging.error(f"🔍 Converting track: {track_url}")
+                youtube_link = await run_blocking_in_executor(spotify_to_youtube, track_url)
+
+                if not youtube_link:
+                    logging.error(f"❌ Failed to convert {track_url}")
+                    return None
+
+                file_path = await download_audio(youtube_link)
+                spotify_title = await run_blocking_in_executor(get_spotify_title, track_url)
+                return file_path, spotify_title
+
+            except Exception as e:
+                logging.error(f"⚠️ Error processing track {track_url}: {e}")
+                return None
+
         tasks = [process_track(url) for url in track_urls]
         results = await asyncio.gather(*tasks)
-        
+
         queue_count = 0
         for idx, result in enumerate(results, start=1):
             await update_progress(idx)
@@ -1974,7 +1971,7 @@ async def spotify(ctx, url: str):
             await progress_message.edit(content="❌ No tracks were added to the queue.")
         else:
             await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks to the queue.")
-        
+
         if not ctx.voice_client or not ctx.voice_client.is_playing():
             await play_next(ctx, ctx.voice_client)
 
