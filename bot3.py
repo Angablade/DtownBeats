@@ -347,7 +347,7 @@ async def get_ctx_from_guild(guild: discord.Guild):
         return None
     message = discord.Message(
           channel=channel,
-          data={"id": 0, "type": 0, "content": "", "author": bot.user.to_dict()},
+          data={"id": 0, "type": 0, "content": "", "author": {"id": bot.user.id, "username": bot.user.name, "discriminator": bot.user.discriminator}},
           state=bot._connection,
           )
     ctx = await bot.get_context(message)
