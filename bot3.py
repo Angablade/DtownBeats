@@ -226,6 +226,7 @@ message_map = {}
 last_active_channels = {} 
 now_playing = {}
 reconnect_cooldowns = {}
+FAILED_CONNECTS = {}  
 
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
@@ -326,10 +327,9 @@ async def handle_resume_on_reconnect(guild, voice_channel):
             await guild.voice_client.disconnect(force=True)
 
         voice_client = await safe_voice_connect(bot, guild, voice_channel)
-        if not voice_client:
-            logging.error(f"Failed to resume on reconnect in guild {guild.id} ({guild.name})")
+        if not voice_client or not voice_client.is_connected():
+            logging.error(f"[{guild.name}] Voice resume failed, skipping playback.")
             return
-
 
         paused_position = current_tracks.get(guild_id, {}).get("paused_position") or 0
         audio_file = retrieve_audio_file_for_current_track(guild_id)
@@ -761,28 +761,47 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
 async def safe_voice_connect(bot, guild: discord.Guild, voice_channel: discord.VoiceChannel, timeout: int = 10):
     """
-    Safely connect to a Discord voice channel, handling existing stale connections and timeouts.
+    Safely connect to a Discord voice channel, handling broken state and preventing tight retry loops.
     """
+    now = time.time()
+    if guild.id in reconnect_cooldowns and now < reconnect_cooldowns[guild.id]:
+        logging.warning(f"[{guild.name}] Skipping voice reconnect due to cooldown.")
+        return None
+
+    # Reset cooldown on success, otherwise backoff
+    reconnect_cooldowns[guild.id] = now + 30
+
+    # Try to get any current voice client
     existing_vc = discord.utils.get(bot.voice_clients, guild=guild)
     if existing_vc:
         if existing_vc.is_connected():
-            logging.info(f"Already connected to voice in {guild.name}")
+            logging.info(f"[{guild.name}] Already connected.")
             return existing_vc
+
+        logging.warning(f"[{guild.name}] VoiceClient appears stale. Forcing cleanup.")
         try:
-            await existing_vc.disconnect(force=True)
-            logging.info(f"Disconnected stale VoiceClient in {guild.name}")
+            # Force disconnect corrupted state
+            existing_vc.cleanup()
+            existing_vc.stop()
+            if hasattr(existing_vc, "loop_task"):
+                existing_vc.loop_task.cancel()
+            existing_vc.ws = None
         except Exception as e:
-            logging.warning(f"Failed to disconnect stale VoiceClient in {guild.name}: {e}")
+            logging.warning(f"[{guild.name}] Failed to clean up old VoiceClient: {e}")
 
     try:
-        logging.info(f"Attempting to connect to voice in {guild.name} ({voice_channel.name})...")
-        return await voice_channel.connect(timeout=timeout, reconnect=True)
-    except ClientException as e:
-        logging.warning(f"Voice connect ClientException in {guild.name}: {e}")
-    except asyncio.TimeoutError:
-        logging.error(f"Voice connect TimeoutError in {guild.name}")
+        logging.info(f"[{guild.name}] Attempting voice connect to channel: {voice_channel.name}")
+        vc = await voice_channel.connect(timeout=timeout, reconnect=False)
+        FAILED_CONNECTS[guild.id] = 0
+        return vc
+    except (asyncio.TimeoutError, discord.ClientException, discord.errors.ConnectionClosed) as e:
+        logging.error(f"[{guild.name}] Voice connect failed: {e}")
+        FAILED_CONNECTS[guild.id] = FAILED_CONNECTS.get(guild.id, 0) + 1
+        if FAILED_CONNECTS[guild.id] > 5:
+            reconnect_cooldowns[guild.id] = now + 300  # Cooldown 5 min
+            logging.critical(f"[{guild.name}] Too many failures, backing off.")
     except Exception as e:
-        logging.exception(f"Unexpected error during voice connect in {guild.name}: {e}")
+        logging.exception(f"[{guild.name}] Unexpected error during voice connect: {e}")
 
     return None
 
@@ -791,6 +810,10 @@ async def on_ready():
     try:
         from utils.web_app import start_web_server_in_background
         start_web_server_in_background(server_queues, now_playing, track_history)
+        try:
+            await vc.disconnect(force=True)
+        except:
+            pass
         logging.error(f"Bot is ready! Logged in as {bot.user}")
         for guild in bot.guilds:
                 file_path = os.path.join('static', f"{guild.id}.png")
