@@ -38,6 +38,7 @@ from aiofiles import open as aopen
 from discord.ext import commands
 from discord.ui import View, Button
 from discord import FFmpegPCMAudio, Embed
+from discord.errors import ClientException
 from fuzzywuzzy import fuzz
 
 #ENVIRONMENT VARIABLES
@@ -224,6 +225,7 @@ autoplay_enabled = {}
 message_map = {}
 last_active_channels = {} 
 now_playing = {}
+reconnect_cooldowns = {}
 
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
@@ -310,11 +312,24 @@ async def handle_resume_on_reconnect(guild, voice_channel):
     await asyncio.sleep(2)
 
     guild_id = guild.id
+
+    now = asyncio.get_event_loop().time()
+    cooldown = reconnect_cooldowns.get(guild.id, 0)
+    if now < cooldown:
+        logging.info(f"Skipping reconnect attempt due to cooldown for guild {guild.name}")
+        return
+
+    reconnect_cooldowns[guild.id] = now + 30  # wait at least 30 seconds between attempts
+
     try:
         if guild.voice_client:
             await guild.voice_client.disconnect(force=True)
 
-        voice_client = await voice_channel.connect()
+        voice_client = await safe_voice_connect(bot, guild, voice_channel)
+        if not voice_client:
+            logging.error(f"Failed to resume on reconnect in guild {guild.id} ({guild.name})")
+            return
+
 
         paused_position = current_tracks.get(guild_id, {}).get("paused_position") or 0
         audio_file = retrieve_audio_file_for_current_track(guild_id)
@@ -744,6 +759,32 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     while voice_client.is_playing():
         await asyncio.sleep(1)
 
+async def safe_voice_connect(bot, guild: discord.Guild, voice_channel: discord.VoiceChannel, timeout: int = 10):
+    """
+    Safely connect to a Discord voice channel, handling existing stale connections and timeouts.
+    """
+    existing_vc = discord.utils.get(bot.voice_clients, guild=guild)
+    if existing_vc:
+        if existing_vc.is_connected():
+            logging.info(f"Already connected to voice in {guild.name}")
+            return existing_vc
+        try:
+            await existing_vc.disconnect(force=True)
+            logging.info(f"Disconnected stale VoiceClient in {guild.name}")
+        except Exception as e:
+            logging.warning(f"Failed to disconnect stale VoiceClient in {guild.name}: {e}")
+
+    try:
+        logging.info(f"Attempting to connect to voice in {guild.name} ({voice_channel.name})...")
+        return await voice_channel.connect(timeout=timeout, reconnect=True)
+    except ClientException as e:
+        logging.warning(f"Voice connect ClientException in {guild.name}: {e}")
+    except asyncio.TimeoutError:
+        logging.error(f"Voice connect TimeoutError in {guild.name}")
+    except Exception as e:
+        logging.exception(f"Unexpected error during voice connect in {guild.name}: {e}")
+
+    return None
 
 @bot.event
 async def on_ready():
