@@ -340,34 +340,70 @@ async def handle_resume_on_reconnect(guild, voice_channel):
         logging.exception("Failed to resume on reconnect")
 
 async def get_ctx_from_guild(guild: discord.Guild):
-    if not guild:
-        return None
-    channel = guild.system_channel or (guild.text_channels[0] if guild.text_channels else None)
-    if not channel:
-        return None
-    message = discord.Message(
-        channel=channel,
-        data={
-            "id": 0,
-            "type": 0,
-            "content": "",
-            "attachments": [],
-            "embeds": [],
-            "author": {
-                "id": bot.user.id,
-                "username": bot.user.name,
-                "discriminator": bot.user.discriminator
-            }
-        },
-        state=bot._connection,
-    )
+    """
+    Safely gets a Context object for a guild using recent channels or fallback options.
+    Will use last known active or bot-used channels if available, fall back to system/first text channel,
+    and DM the server owner as a last resort.
+    """
 
-    ctx = await bot.get_context(message)
+    if not guild:
+        logging.error("get_ctx_from_guild: No guild object provided.")
+        return None
+
+    guild_id = guild.id
+    candidate_channels = []
+
+    # 1. Try last active user message channel
+    if guild_id in last_active_channels:
+        chan = bot.get_channel(last_active_channels[guild_id])
+        if chan and chan.permissions_for(guild.me).send_messages:
+            candidate_channels.append(chan)
+
+    # 2. Try last bot message sent channel
+    last_bot_msg = message_map.get(guild_id)
+    if isinstance(last_bot_msg, list) and last_bot_msg:
+        chan = last_bot_msg[0].channel
+        if chan and chan.permissions_for(guild.me).send_messages:
+            candidate_channels.append(chan)
+
+    # 3. Try system channel
+    if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
+        candidate_channels.append(guild.system_channel)
+
+    # 4. Try any text channel where the bot can speak
+    for chan in guild.text_channels:
+        if chan.permissions_for(guild.me).send_messages:
+            candidate_channels.append(chan)
+            break
+
+    # Try each candidate
+    for channel in candidate_channels:
+        try:
+            temp_msg = await channel.send("🔧 Resuming playback...")
+            ctx = await bot.get_context(temp_msg)
+            try:
+                await temp_msg.delete()
+            except discord.Forbidden:
+                logging.warning(f"get_ctx_from_guild: Could not delete temp message in {channel.name}")
+            logging.info(f"get_ctx_from_guild: Using channel {channel.name} ({channel.id}) in guild {guild.name}")
+            return ctx
+        except Exception as e:
+            logging.warning(f"get_ctx_from_guild: Failed to send temp message in {channel.name} ({channel.id}): {e}")
+
+    # Final fallback: DM the owner
     try:
-        await message.delete()
-    except discord.errors.NotFound:
-         pass
-    return ctx
+        owner = guild.owner
+        if owner:
+            dm_channel = await owner.create_dm()
+            temp_msg = await dm_channel.send(f"⚠️ The bot couldn't send messages in any text channels of **{guild.name}**.\nAttempting playback recovery here.")
+            ctx = await bot.get_context(temp_msg)
+            logging.warning(f"get_ctx_from_guild: Fallback to DMing guild owner {owner} in guild {guild.name}")
+            return ctx
+    except Exception as e:
+        logging.exception(f"get_ctx_from_guild: Failed to DM guild owner of {guild.name}: {e}")
+
+    logging.error(f"get_ctx_from_guild: All fallbacks failed for guild {guild.name} ({guild.id})")
+    return None
 
 @bot.event
 async def on_guild_join(guild):
@@ -507,7 +543,10 @@ async def messagesender(bot, channel_id, content=None, embed=None, command_messa
             return
 
     if command_message:
-        message_map[command_message.id] = messages
+        message_map[command_message.guild.id] = messages
+    elif messages:
+        message_map[messages[0].guild.id] = messages
+
 
 async def run_blocking_in_executor(func, *args):
     loop = asyncio.get_running_loop()
