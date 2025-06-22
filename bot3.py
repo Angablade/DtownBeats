@@ -346,10 +346,22 @@ async def get_ctx_from_guild(guild: discord.Guild):
     if not channel:
         return None
     message = discord.Message(
-          channel=channel,
-          data={"id": 0, "type": 0, "content": "", "author": {"id": bot.user.id, "username": bot.user.name, "discriminator": bot.user.discriminator}},
-          state=bot._connection,
-          )
+        channel=channel,
+        data={
+            "id": 0,
+            "type": 0,
+            "content": "",
+            "attachments": [],
+            "embeds": [],
+            "author": {
+                "id": bot.user.id,
+                "username": bot.user.name,
+                "discriminator": bot.user.discriminator
+            }
+        },
+        state=bot._connection,
+    )
+
     ctx = await bot.get_context(message)
     try:
         await message.delete()
@@ -1692,7 +1704,7 @@ async def version(ctx):
     async with ctx.typing():
                                             #[HHMMSS-DDMMYYYY]
         embed = discord.Embed(
-            title=f"DtownBeats - Version 0.4H.1 [201837-25052025]",
+            title=f"DtownBeats - Version 0.4J.3 [005243-22062025]",
             description="🎵 Bringing beats to your server with style!",
             color=discord.Color.dark_blue()
         )
