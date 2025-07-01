@@ -736,7 +736,10 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     if not audio_file or not os.path.exists(audio_file):
         logging.error(f"[Playback Error] Audio file not found: {audio_file}")
         await messagesender(bot, ctx.channel.id, content="❌ Failed to play the track. Skipping...")
-        await play_next_in_queue(ctx)
+
+        while voice_client and voice_client.is_connected() and voice_client.is_playing():
+            await asyncio.sleep(2)
+        await play_next(ctx, voice_client)
         return
 
     await asyncio.to_thread(playback)
@@ -780,18 +783,13 @@ async def safe_voice_connect(bot, guild: discord.Guild, voice_channel: discord.V
 
         logging.warning(f"[{guild.name}] VoiceClient appears stale. Forcing cleanup.")
         try:
-            # Force disconnect corrupted state
-            existing_vc.cleanup()
-            existing_vc.stop()
-            if hasattr(existing_vc, "loop_task"):
-                existing_vc.loop_task.cancel()
-            existing_vc.ws = None
+            await existing_vc.disconnect(force=True)
         except Exception as e:
-            logging.warning(f"[{guild.name}] Failed to clean up old VoiceClient: {e}")
+            logging.warning(f"[{guild.name}] Error while force-disconnecting stale VC: {e}")
 
     try:
         logging.info(f"[{guild.name}] Attempting voice connect to channel: {voice_channel.name}")
-        vc = await voice_channel.connect(timeout=timeout, reconnect=False)
+        vc = await voice_channel.connect(timeout=timeout, reconnect=True)
         FAILED_CONNECTS[guild.id] = 0
         return vc
     except (asyncio.TimeoutError, discord.ClientException, discord.errors.ConnectionClosed) as e:
@@ -811,9 +809,11 @@ async def on_ready():
         from utils.web_app import start_web_server_in_background
         start_web_server_in_background(server_queues, now_playing, track_history)
         try:
-            await vc.disconnect(force=True)
-        except:
-            pass
+            for vc in bot.voice_clients:
+                await vc.disconnect(force=True)
+        except Exception as e:
+            logging.warning(f"No existing voice clients to disconnect: {e}")
+
         logging.error(f"Bot is ready! Logged in as {bot.user}")
         for guild in bot.guilds:
                 file_path = os.path.join('static', f"{guild.id}.png")
