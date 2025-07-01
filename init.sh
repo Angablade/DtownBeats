@@ -7,7 +7,7 @@ apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmp
 
 # Upgrade pip and install necessary Python packages
 pip install --upgrade pip
-pip install --no-cache-dir "pybind11>=2.12" "numpy<2" py-cord pyyaml requests yt-dlp asyncio aiohttp pillow \
+pip install --no-cache-dir "pybind11>=2.12" "numpy<2" discord.py pyyaml requests yt-dlp asyncio aiohttp pillow \
     musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein spotdl \
     stt fastapi uvicorn httpx python-multipart python-dotenv
 
