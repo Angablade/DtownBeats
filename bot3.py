@@ -242,10 +242,11 @@ async def on_message(message):
     await bot.process_commands(message)
 
 async def download_audio(video_id):
-    try: 
-         filenam = await get_audio_filename(video_id)
-         logging.error(f"{filenam} is playing...")
-         return filenam
+    loop = asyncio.get_running_loop()
+    try:
+        filenam = await loop.run_in_executor(executor, get_audio_filename, video_id)
+        logging.error(f"{filenam} is playing...")
+        return filenam
     except Exception as e:
         logging.error(f"Failed to download audio: {e}")
         return None
@@ -300,7 +301,7 @@ async def handle_resume_on_reconnect(guild, voice_channel):
         logging.info(f"Skipping reconnect attempt due to cooldown for guild {guild.name}")
         return
 
-    reconnect_cooldowns[guild.id] = now + 30  # wait at least 30 seconds between attempts
+    reconnect_cooldowns[guild.id] = now + 30
 
     try:
         if guild.voice_client:
@@ -732,12 +733,15 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     if not server_queues[guild_id].empty():
         try:
             temp_queue = list(server_queues[guild_id]._queue)
-            if temp_queue:
-                next_video_id, next_video_title = temp_queue[0]
-                logging.info(f"Pre-downloading next track: {next_video_title}")
-                asyncio.create_task(download_audio(next_video_id))
+            for video_id, video_title in temp_queue:
+                if video_id.startswith("|"):
+                    continue
+                audio_file_path = f"music/{video_id}.mp3"
+                if not os.path.exists(audio_file_path):
+                    logging.info(f"Pre-downloading track: {video_title}")
+                    asyncio.create_task(download_audio(video_id))
         except Exception as e:
-            logging.error(f"Error pre-downloading the next track: {e}")
+            logging.error(f"Error pre-downloading tracks: {e}")
 
     while voice_client.is_playing():
         await asyncio.sleep(1)
@@ -750,11 +754,7 @@ async def safe_voice_connect(bot, guild: discord.Guild, voice_channel: discord.V
     if guild.id in reconnect_cooldowns and now < reconnect_cooldowns[guild.id]:
         logging.warning(f"[{guild.name}] Skipping voice reconnect due to cooldown.")
         return None
-
-    # Reset cooldown on success, otherwise backoff
     reconnect_cooldowns[guild.id] = now + 30
-
-    # Try to get any current voice client
     existing_vc = discord.utils.get(bot.voice_clients, guild=guild)
     if existing_vc:
         if existing_vc.is_connected():
@@ -1825,11 +1825,6 @@ async def version(ctx):
         except discord.Forbidden:
             await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
 
-import os
-import shutil
-import subprocess
-import discord
-
 @bot.command(name="sendplox", aliases=["dlfile"])
 async def sendmp3(ctx):
     async with ctx.typing():
@@ -2430,7 +2425,6 @@ async def update_yt_dlp(ctx):
 
     await messagesender(bot, ctx.channel.id, content="🔄 Updating pip and yt-dlp...")
     try:
-        # Step 1: Upgrade pip
         pip_proc = await asyncio.create_subprocess_exec(
             "python3", "-m", "pip", "install", "--upgrade", "pip",
             stdout=asyncio.subprocess.PIPE,
@@ -2438,7 +2432,6 @@ async def update_yt_dlp(ctx):
         )
         await pip_proc.communicate()
 
-        # Step 2: Upgrade yt-dlp
         yt_proc = await asyncio.create_subprocess_exec(
             "python3", "-m", "pip", "install", "--no-cache-dir", "--upgrade", "--force-reinstall", "yt-dlp",
             stdout=asyncio.subprocess.PIPE,
