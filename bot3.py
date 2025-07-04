@@ -227,6 +227,7 @@ last_active_channels = {}
 now_playing = {}
 reconnect_cooldowns = {}
 FAILED_CONNECTS = {}  
+preload_tasks = {}
 
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
@@ -245,11 +246,23 @@ async def download_audio(video_id):
     loop = asyncio.get_running_loop()
     try:
         filenam = await loop.run_in_executor(executor, get_audio_filename, video_id)
-        logging.error(f"{filenam} is playing...")
+        if not filenam or not os.path.exists(filenam):
+            raise ValueError(f"Downloaded file is missing or invalid for {video_id}")
+        logging.info(f"{filenam} is ready...")
         return filenam
     except Exception as e:
-        logging.error(f"Failed to download audio: {e}")
-        return None
+        logging.error(f"Failed to download audio for {video_id}: {e}")
+        raise
+
+async def retry_download(video_id, retries=2):
+    for attempt in range(retries):
+        try:
+            return await download_audio(video_id)
+        except Exception as e:
+            logging.warning(f"[{video_id}] Retry {attempt+1} failed: {e}")
+            await asyncio.sleep(1)
+    logging.error(f"[{video_id}] All retries failed.")
+    return None
 
 async def check_perms(ctx, guild_id):
     if ctx.author.id in banned_users:
@@ -638,7 +651,17 @@ async def play_next(ctx, voice_client):
             if video_id[:1] == "|":
                 audio_file = video_id[1:]
             else:
-                audio_file = await download_audio(video_id)
+                if video_id in preload_tasks:
+                    try:
+                        audio_file = await preload_tasks.pop(video_id)
+                        if not audio_file:
+                            raise ValueError("Preloaded file is None")
+                    except Exception as e:
+                        logging.error(f"Preload task for {video_id} failed or returned None: {e}")
+                        audio_file = await retry_download(video_id)
+                else:
+                    audio_file = await retry_download(video_id)
+
                 if not audio_file:
                     await messagesender(bot, ctx.channel.id, "Failed to download the track. Skipping...")
                     continue 
@@ -736,10 +759,9 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
             for video_id, video_title in temp_queue:
                 if video_id.startswith("|"):
                     continue
-                audio_file_path = f"music/{video_id}.mp3"
-                if not os.path.exists(audio_file_path):
-                    logging.info(f"Pre-downloading track: {video_title}")
-                    asyncio.create_task(download_audio(video_id))
+                logging.info(f"Pre-downloading track: {video_title}")
+                if video_id not in preload_tasks:
+                    preload_tasks[video_id] = asyncio.create_task(download_audio(video_id))
         except Exception as e:
             logging.error(f"Error pre-downloading tracks: {e}")
 
@@ -2013,7 +2035,7 @@ async def spotify(ctx, url: str):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info("https://music.youtube.com/watch?v=" + url, download=True)
 
-        async def download_audio(youtube_link):
+        async def S_download_audio(youtube_link):
             output_path = f"music/{youtube_link}.mp3"
             ydl_opts = {
                 'format': 'bestaudio[acodec^=opus]/bestaudio',
@@ -2042,7 +2064,7 @@ async def spotify(ctx, url: str):
                     logging.error(f"❌ Failed to convert {track_url}")
                     return None
 
-                file_path = await download_audio(youtube_link)
+                file_path = await S_download_audio(youtube_link)
                 spotify_title = await run_blocking_in_executor(get_spotify_title, track_url)
                 return file_path, spotify_title
 
