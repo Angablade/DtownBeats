@@ -243,16 +243,22 @@ async def on_message(message):
     await bot.process_commands(message)
 
 async def download_audio(video_id):
-    loop = asyncio.get_running_loop()
     try:
-        filenam = await loop.run_in_executor(executor, get_audio_filename, video_id)
+        if asyncio.iscoroutinefunction(get_audio_filename):
+            filenam = await get_audio_filename(video_id)
+        else:
+            loop = asyncio.get_running_loop()
+            filenam = await loop.run_in_executor(executor, get_audio_filename, video_id)
+
         if not filenam or not os.path.exists(filenam):
             raise ValueError(f"Downloaded file is missing or invalid for {video_id}")
+        
         logging.info(f"{filenam} is ready...")
         return filenam
     except Exception as e:
         logging.error(f"Failed to download audio for {video_id}: {e}")
         raise
+
 
 async def retry_download(video_id, retries=2):
     for attempt in range(retries):
