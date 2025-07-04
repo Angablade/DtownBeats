@@ -289,26 +289,6 @@ async def on_voice_state_update(member, before, after):
         if guild_id in bot.timeout_tasks:
             bot.timeout_tasks[guild_id].cancel()
 
-        if before.channel is None and after.channel is not None:
-            bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(guild))
-
-            if guild_id in current_tracks and "paused_position" in current_tracks[guild_id]:
-                paused_position = current_tracks[guild_id].get("paused_position", 0)
-                logging.error(f"Resuming track from position {paused_position} for guild {guild_id}.")
-                try:
-                    asyncio.create_task(handle_resume_on_reconnect(guild, after.channel))
-                except Exception:
-                    logging.exception("Failed to resume on reconnect")
-
-        elif before.channel is not None and after.channel is None:
-            if not bot.intentional_disconnections.get(guild_id, False):
-                logging.error("Bot got disconnected from voice channel unexpectedly. Pausing playback...")
-                paused_position = get_current_elapsed_time(guild_id)
-                current_tracks.setdefault(guild_id, {})["paused_position"] = paused_position
-                logging.error(f"Paused track at {paused_position} seconds for guild {guild_id}.")
-            else:
-                bot.intentional_disconnections[guild_id] = False
-
 async def handle_resume_on_reconnect(guild, voice_channel):
     await asyncio.sleep(2)
 
@@ -751,7 +731,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 
     if not server_queues[guild_id].empty():
         try:
-            temp_queue = list(server_queues[guild_id].queue)
+            temp_queue = list(server_queues[guild_id]._queue)
             if temp_queue:
                 next_video_id, next_video_title = temp_queue[0]
                 logging.info(f"Pre-downloading next track: {next_video_title}")
@@ -1378,8 +1358,10 @@ async def seek(ctx, position: str):
             await messagesender(bot, ctx.channel.id, content="There's no track information available to seek.")
             return
     
-        video_id = current_track[0]
+        video_id = current_track[0] 
         audio_file = f"music/{video_id}.mp3"
+        if not os.path.exists(audio_file):
+            audio_file = f"music/{video_id}.opus"
         if not os.path.exists(audio_file):
             await messagesender(bot, ctx.channel.id, content="Audio file not found for seeking.")
             return
@@ -2073,7 +2055,7 @@ async def spotify(ctx, url: str):
                 logging.error(f"⚠️ Error processing track {track_url}: {e}")
                 return None
 
-        tasks = [process_track(url) for url in track_urls]
+        tasks = [process_track(track_url) for track_url in track_urls]
         results = await asyncio.gather(*tasks)
 
         queue_count = 0
