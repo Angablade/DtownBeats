@@ -6,13 +6,18 @@ import threading
 import json
 import csv
 import io
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResponse, FileResponse
 from starlette.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
 from xml.etree.ElementTree import Element, tostring
+from authlib.integrations.starlette_client import OAuth
+from dotenv import load_dotenv
 
 from utils.metadata import MetadataManager
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -166,7 +171,7 @@ def convert_data(data, fmt):
     else:
         return JSONResponse(content=data)
 
-def render_queue_html(guild_id):
+def render_queue_html(guild_id, request):
     if guild_id not in server_queues.keys():
         return f"<h1>No queue found for Guild ID: {guild_id}</h1>"
     html_content = f"""
@@ -184,6 +189,7 @@ def render_queue_html(guild_id):
       </head>
       <body>
         <h1>Music Queue for Guild ID: {guild_id}</h1>
+        <a href="/login">Login with Discord</a>
     """
     queue = server_queues[guild_id]
     
@@ -216,13 +222,15 @@ def render_queue_html(guild_id):
         <th>Title</th>
       </tr>
     """
+    can_download = user_in_guild(request, guild_id)
     for index, item in enumerate(queue._queue, start=1):
         track_id = html.escape(str(item[0]))
         title = html.escape(str(item[1]))
+        download_link = f'<a href="/download/{guild_id}/{track_id}">[Download]</a>' if can_download else ''
         html_content += f"""
         <tr>
           <td>{index}</td>
-          <td><a href="https://youtube.com/watch?v={track_id}">{track_id}</a></td>
+          <td><a href="https://youtube.com/watch?v={track_id}">{track_id}</a> {download_link}</td>
           <td>{title}</td>
         </tr>
         """
@@ -281,6 +289,7 @@ def render_queues_html():
       </head>
       <body>
         <h1>Music Queues</h1>
+        <a href="/login">Login with Discord</a>
         <div class="tab">
     """
     for guild_id in server_queues.keys():
@@ -344,13 +353,51 @@ def render_queues_html():
     """
     return html_content
 
+def is_owner(user_id: str) -> bool:
+    return str(user_id) == str(os.getenv("BOT_OWNER_ID"))
+
+def user_in_guild(request: Request, guild_id: str) -> bool:
+    user = request.session.get('user')
+    if not user:
+        return False
+    if is_owner(user['id']):
+        return True
+    user_guilds = request.session.get('guilds', [])
+    return any(g['id'] == guild_id for g in user_guilds)
+
+@app.get('/login')
+async def login(request: Request):
+    redirect_uri = request.url_for('auth')
+    return await oauth.discord.authorize_redirect(request, redirect_uri)
+
+@app.get('/auth')
+async def auth(request: Request):
+    token = await oauth.discord.authorize_access_token(request)
+    user = await oauth.discord.get('users/@me', token=token)
+    guilds = await oauth.discord.get('users/@me/guilds', token=token)
+    request.session['user'] = user.json()
+    request.session['guilds'] = guilds.json()
+    return RedirectResponse(url='/queues')
+
+@app.get('/logout')
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url='/')
+
 @app.get("/queue", response_class=HTMLResponse)
-async def get_queue(guild_id: str = Query(..., description="Guild ID for which to fetch the queue"),
+async def get_queue(request: Request, guild_id: str = Query(..., description="Guild ID for which to fetch the queue"),
                     format: str = Query("html", description="Response format: html, json, xml, yaml, csv, or toml")):
+    user = request.session.get('user')
+    if not user:
+        return RedirectResponse(url='/login')
+    if not user_in_guild(request, guild_id):
+        return HTMLResponse(content="You are not authorized to view this queue.", status_code=403)
+    
     if guild_id not in server_queues.keys():
         error_msg = {"error": f"No queue found for Guild ID: {guild_id}"}
         if format.lower() == "html":
-            return HTMLResponse(content=f"<h1>No queue found for Guild ID: {guild_id}</h1>", status_code=404)
+            html_content = render_queue_html(guild_id, request)
+            return HTMLResponse(content=html_content, status_code=404)
         else:
             return JSONResponse(content=error_msg, status_code=404)
     
@@ -361,40 +408,137 @@ async def get_queue(guild_id: str = Query(..., description="Guild ID for which t
     }
     
     if format.lower() == "html":
-        html_content = render_queue_html(guild_id)
+        html_content = render_queue_html(guild_id, request)
         return HTMLResponse(content=html_content)
     else:
         return convert_data(data, format)
 
 @app.get("/queues", response_class=HTMLResponse)
-async def get_queues(format: str = Query("html", description="Response format: html, json, xml, yaml, csv, or toml")):
+async def get_queues(request: Request, format: str = Query("html")):
+    user = request.session.get('user')
+    if not user:
+        return RedirectResponse(url='/login')
+    guilds = request.session.get('guilds', [])
+    allowed_guilds = [g['id'] for g in guilds]
+    if is_owner(user['id']):
+        allowed_guilds = list(server_queues.keys())
     response_data = {}
-    for guild_id, queue in server_queues.items():
-        last_played = now_playing.get(guild_id, None)
-        if last_played:
-            metadata = metadata_manager.load_metadata(last_played[0])
-            if not metadata:
-                metadata = metadata_manager.get_or_fetch_metadata(last_played[0], last_played[1])
-                metadata_manager.save_metadata(last_played[0], metadata)
-            track_info = {
-                "artist": metadata.get("artist", "Unknown"),
-                "title": metadata.get("title", "Unknown"),
-                "duration": metadata.get("duration", "Unknown"),
-                "track_id": last_played[0]
+    for guild_id in allowed_guilds:
+        if guild_id in server_queues:
+            queue = server_queues[guild_id]
+            last_played = now_playing.get(guild_id, None)
+            if last_played:
+                metadata = metadata_manager.load_metadata(last_played[0])
+                if not metadata:
+                    metadata = metadata_manager.get_or_fetch_metadata(last_played[0], last_played[1])
+                    metadata_manager.save_metadata(last_played[0], metadata)
+                track_info = {
+                    "artist": metadata.get("artist", "Unknown"),
+                    "title": metadata.get("title", "Unknown"),
+                    "duration": metadata.get("duration", "Unknown"),
+                    "track_id": last_played[0]
+                }
+            else:
+                track_info = {}
+            response_data[guild_id] = {
+                "last_played": track_info,
+                "queue": [{"track_id": item[0], "title": item[1]} for item in queue._queue],
+                "history": track_history.get(guild_id, [])
             }
-        else:
-            track_info = {}
-        response_data[guild_id] = {
-            "last_played": track_info,
-            "queue": [{"track_id": item[0], "title": item[1]} for item in queue._queue],
-            "history": track_history.get(guild_id, [])
-        }
-    
     if format.lower() == "html":
         html_content = render_queues_html()
         return HTMLResponse(content=html_content)
     else:
         return convert_data(response_data, format)
+
+@app.get("/download/{guild_id}/{track_id}")
+async def download_track(request: Request, guild_id: str, track_id: str):
+    user = request.session.get('user')
+    if not user or not user_in_guild(request, guild_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    # Sanitize track_id
+    if not track_id.replace('-', '').replace('_', '').isalnum():
+        raise HTTPException(status_code=400, detail="Invalid track id")
+    file_path = f"/app/music/{track_id}.mp3"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path, filename=f"{track_id}.mp3")
+
+@app.get("/download/owner/{track_id}")
+async def download_owner_track(request: Request, track_id: str):
+    user = request.session.get('user')
+    if not user or not is_owner(user['id']):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    # Sanitize track_id
+    if not track_id.replace('-', '').replace('_', '').isalnum():
+        raise HTTPException(status_code=400, detail="Invalid track id")
+    file_path = f"/app/music/{track_id}.mp3"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path, filename=f"{track_id}.mp3")
+
+@app.get("/library", response_class=HTMLResponse)
+async def music_library(request: Request, q: str = "", page: int = 1, per_page: int = 20):
+    user = request.session.get('user')
+    if not user:
+        return RedirectResponse(url='/login')
+    allowed_guilds = [g['id'] for g in request.session.get('guilds', [])]
+    if is_owner(user['id']):
+        allowed_guilds = list(server_queues.keys())
+    # Build a mapping of track_id -> allowed_guilds that have it in their queue/history
+    track_guild_map = {}
+    for guild_id in allowed_guilds:
+        if guild_id in server_queues:
+            for item in server_queues[guild_id]._queue:
+                tid = str(item[0])
+                track_guild_map.setdefault(tid, set()).add(guild_id)
+        if guild_id in track_history:
+            for item in track_history[guild_id]:
+                tid = str(item[0])
+                track_guild_map.setdefault(tid, set()).add(guild_id)
+    music_files = []
+    q_lower = q.lower()
+    for fname in os.listdir("/app/music"):
+        if fname.endswith(".mp3"):
+            track_id = fname[:-4]
+            metadata = metadata_manager.load_metadata(track_id) or {}
+            title = metadata.get("title", track_id)
+            artist = metadata.get("artist", "Unknown")
+            # Enhanced search: match query in track_id, title, or artist
+            if (not q or q_lower in track_id.lower() or q_lower in title.lower() or q_lower in artist.lower()):
+                if is_owner(user['id']) or track_id in track_guild_map:
+                    music_files.append((track_id, title, artist, sorted(track_guild_map.get(track_id, []))))
+    # Pagination
+    total = len(music_files)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    end = start + per_page
+    paged_files = music_files[start:end]
+    # Render HTML
+    html_content = f"<form method='get'>"
+    html_content += f"<input name='q' value='{html.escape(q)}' placeholder='Search by ID, title, or artist...'>"
+    html_content += f"<input type='hidden' name='per_page' value='{per_page}'>"
+    html_content += f"<input type='submit' value='Search'></form>"
+    html_content += '<a href="/queues">Queues</a> | <a href="/library">Library</a> | <a href="/logout">Logout</a>'
+    html_content += f"<p>Showing {start+1}-{min(end,total)} of {total} results. Page {page} of {total_pages}.</p>"
+    html_content += "<table><tr><th>Title</th><th>Artist</th><th>Track ID</th><th>Download</th></tr>"
+    for track_id, title, artist, guilds in paged_files:
+        download_link = ""
+        if is_owner(user['id']) and not guilds:
+            download_link = f'<a href="/download/owner/{track_id}">[Download]</a>'
+        elif guilds:
+            download_link = f'<a href="/download/{guilds[0]}/{track_id}">[Download]</a>'
+        html_content += f"<tr><td>{html.escape(title)}</td><td>{html.escape(artist)}</td><td>{html.escape(track_id)}</td><td>{download_link}</td></tr>"
+    html_content += "</table>"
+    # Pagination controls
+    html_content += "<div style='margin-top:10px;'>"
+    if page > 1:
+        html_content += f'<a href="?q={html.escape(q)}&per_page={per_page}&page={page-1}">Previous</a> '
+    if page < total_pages:
+        html_content += f'<a href="?q={html.escape(q)}&per_page={per_page}&page={page+1}">Next</a>'
+    html_content += "</div>"
+    return HTMLResponse(content=html_content)
 
 def run_web_app():
     uvicorn.run(app, host="0.0.0.0", port=80)

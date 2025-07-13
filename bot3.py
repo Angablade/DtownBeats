@@ -782,24 +782,30 @@ async def safe_voice_connect(bot, guild: discord.Guild, voice_channel: discord.V
     if guild.id in reconnect_cooldowns and now < reconnect_cooldowns[guild.id]:
         logging.warning(f"[{guild.name}] Skipping voice reconnect due to cooldown.")
         return None
-    reconnect_cooldowns[guild.id] = now + 30
-    existing_vc = discord.utils.get(bot.voice_clients, guild=guild)
-    if existing_vc:
-        if existing_vc.is_connected():
-            logging.info(f"[{guild.name}] Already connected.")
-            return existing_vc
 
-        logging.warning(f"[{guild.name}] VoiceClient appears stale. Forcing cleanup.")
-        try:
-            await existing_vc.disconnect(force=True)
-        except Exception as e:
-            logging.warning(f"[{guild.name}] Error while force-disconnecting stale VC: {e}")
+    # Clean up existing voice client
+    try:
+        if guild.voice_client:
+            await guild.voice_client.disconnect(force=True)
+            await asyncio.sleep(2)  # Add delay after disconnect
+    except Exception as e:
+        logging.warning(f"[{guild.name}] Error cleaning up voice client: {e}")
+
+    reconnect_cooldowns[guild.id] = now + 30
 
     try:
+        # Verify voice channel still exists and is accessible
+        if not voice_channel or not voice_channel.permissions_for(guild.me).connect:
+            logging.error(f"[{guild.name}] Cannot connect: Missing permissions or invalid channel")
+            return None
+
         logging.info(f"[{guild.name}] Attempting voice connect to channel: {voice_channel.name}")
-        vc = await voice_channel.connect(timeout=timeout, reconnect=True)
+        
+        # Use connect with explicit timeout and reconnect settings
+        vc = await voice_channel.connect(timeout=timeout, reconnect=True, self_deaf=True)
         FAILED_CONNECTS[guild.id] = 0
         return vc
+
     except (asyncio.TimeoutError, discord.ClientException, discord.errors.ConnectionClosed) as e:
         logging.error(f"[{guild.name}] Voice connect failed: {e}")
         FAILED_CONNECTS[guild.id] = FAILED_CONNECTS.get(guild.id, 0) + 1

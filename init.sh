@@ -9,8 +9,10 @@ apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmp
 pip install --upgrade pip
 pip install --no-cache-dir "pybind11>=2.12" "numpy<2" discord.py pyyaml requests yt-dlp asyncio aiohttp pillow \
     musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein spotdl \
-    stt fastapi uvicorn httpx python-multipart python-dotenv
+    stt fastapi uvicorn httpx python-multipart python-dotenv authlib starlette
 
+# If you serve static files with Starlette/StaticFiles, also add:
+pip install aiofiles
 
 # Ensure necessary directories exist
 for dir in /app/{lyrics,music,config,models,sources,utils,albumart,metacache,static}; do
