@@ -23,4 +23,6 @@ services:
       - TIMEOUT_TIME=60
     ports:
       - "3333:80"
+    dns:
+      - 8.8.8.8
     restart: unless-stopped

@@ -228,6 +228,7 @@ now_playing = {}
 reconnect_cooldowns = {}
 FAILED_CONNECTS = {}  
 preload_tasks = {}
+reconnect_cooldowns = {}
 
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
@@ -293,6 +294,9 @@ async def check_perms(ctx, guild_id):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    if member == bot.user and after.channel:
+        reconnect_cooldowns[guild_id] = 0
+
     if member == bot.user:
         guild = before.channel.guild if before.channel else after.channel.guild
         guild_id = guild.id
@@ -774,47 +778,46 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     while voice_client.is_playing():
         await asyncio.sleep(1)
 
-async def safe_voice_connect(bot, guild: discord.Guild, voice_channel: discord.VoiceChannel, timeout: int = 10):
-    """
-    Safely connect to a Discord voice channel, handling broken state and preventing tight retry loops.
-    """
+async def safe_voice_connect(bot, guild, voice_channel, max_retries=3, cooldown_seconds=15):
+    guild_id = guild.id
+
+    # Prevent spamming joins with a cooldown
     now = time.time()
-    if guild.id in reconnect_cooldowns and now < reconnect_cooldowns[guild.id]:
-        logging.warning(f"[{guild.name}] Skipping voice reconnect due to cooldown.")
-        return None
+    last_attempt = reconnect_cooldowns.get(guild_id, 0)
+    if now - last_attempt < cooldown_seconds:
+        logging.warning(f"[{guild.name}] Skipping connect due to cooldown ({cooldown_seconds}s)")
+        return guild.voice_client  # Return existing client or None
 
-    # Clean up existing voice client
-    try:
-        if guild.voice_client:
-            await guild.voice_client.disconnect(force=True)
-            await asyncio.sleep(2)  # Add delay after disconnect
-    except Exception as e:
-        logging.warning(f"[{guild.name}] Error cleaning up voice client: {e}")
+    reconnect_cooldowns[guild_id] = now  # Set new cooldown timestamp
 
-    reconnect_cooldowns[guild.id] = now + 30
+    # Already connected and in same channel
+    voice_client = guild.voice_client
+    if voice_client and voice_client.is_connected():
+        if voice_client.channel == voice_channel:
+            logging.info(f"[{guild.name}] Already connected to {voice_channel.name}")
+            return voice_client
+        else:
+            await voice_client.disconnect(force=True)
+            logging.info(f"[{guild.name}] Disconnected from old channel")
 
-    try:
-        # Verify voice channel still exists and is accessible
-        if not voice_channel or not voice_channel.permissions_for(guild.me).connect:
-            logging.error(f"[{guild.name}] Cannot connect: Missing permissions or invalid channel")
-            return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            logging.info(f"[{guild.name}] Attempt {attempt} to connect to voice...")
+            vc = await voice_channel.connect(timeout=15, reconnect=False)
+            if vc.is_connected():
+                logging.info(f"[{guild.name}] Successfully connected to {voice_channel.name}")
+                return vc
+        except asyncio.TimeoutError:
+            logging.error(f"[{guild.name}] Voice connection timed out (attempt {attempt})")
+        except discord.ClientException as e:
+            logging.error(f"[{guild.name}] Discord client error: {e}")
+            break  # Probably already connecting; don't retry
+        except Exception as e:
+            logging.exception(f"[{guild.name}] Unexpected error on voice connect (attempt {attempt}): {e}")
 
-        logging.info(f"[{guild.name}] Attempting voice connect to channel: {voice_channel.name}")
-        
-        # Use connect with explicit timeout and reconnect settings
-        vc = await voice_channel.connect(timeout=timeout, reconnect=True, self_deaf=True)
-        FAILED_CONNECTS[guild.id] = 0
-        return vc
+        await asyncio.sleep(3)  # Wait before retrying
 
-    except (asyncio.TimeoutError, discord.ClientException, discord.errors.ConnectionClosed) as e:
-        logging.error(f"[{guild.name}] Voice connect failed: {e}")
-        FAILED_CONNECTS[guild.id] = FAILED_CONNECTS.get(guild.id, 0) + 1
-        if FAILED_CONNECTS[guild.id] > 5:
-            reconnect_cooldowns[guild.id] = now + 300  # Cooldown 5 min
-            logging.critical(f"[{guild.name}] Too many failures, backing off.")
-    except Exception as e:
-        logging.exception(f"[{guild.name}] Unexpected error during voice connect: {e}")
-
+    logging.error(f"[{guild.name}] Failed to connect to voice channel after {max_retries} attempts")
     return None
 
 @bot.event
@@ -1658,16 +1661,22 @@ async def move_song(ctx, from_pos: int, to_pos: int):
 async def join_channel(ctx):
     async with ctx.typing():
         guild_id = ctx.guild.id
+
         if not await check_perms(ctx, guild_id):
             return
-    
+
         if ctx.author.voice:
             channel = ctx.author.voice.channel
             bot.intentional_disconnections[guild_id] = False
-            await channel.connect()
-            await messagesender(bot, ctx.channel.id, f"Joined **{channel.name}** voice channel. 🎤")
+
+            voice_client = await safe_voice_connect(bot, ctx.guild, channel)
+
+            if voice_client and voice_client.is_connected():
+                await messagesender(bot, ctx.channel.id, f"✅ Joined **{channel.name}** voice channel. 🎤")
+            else:
+                await messagesender(bot, ctx.channel.id, f"❌ Failed to join **{channel.name}**.")
         else:
-            await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
+            await messagesender(bot, ctx.channel.id, content="❗ You need to be in a voice channel for me to join!")
 
 @bot.command(name="leave", aliases=["go"])
 async def leave_channel(ctx):
