@@ -21,6 +21,10 @@ load_dotenv()
 
 app = FastAPI()
 
+# Add session middleware for authentication sessions
+SESSION_SECRET = os.getenv("SESSION_SECRET", "change_me_secret")
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+
 static_dir = "/app/static"
 albumart_dir = "/app/albumart"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")

@@ -1,4 +1,10 @@
 import discord
+# Confirm py-cord runtime
+try:
+    logging.info(f"Using discord library version: {discord.__version__}")
+except Exception:
+    pass
+
 import os
 import re
 import sys
@@ -294,24 +300,24 @@ async def check_perms(ctx, guild_id):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if member == bot.user and after.channel:
-        reconnect_cooldowns[guild_id] = 0
-
+    # Fix: guild_id was referenced before assignment causing exceptions on every voice state update.
     if member == bot.user:
-        guild = before.channel.guild if before.channel else after.channel.guild
-        guild_id = guild.id
-
-        try:
-            if guild_id in guild_volumes:
-                voice_client = guild.voice_client
-                if voice_client and voice_client.source:
-                    voice_client.source = discord.PCMVolumeTransformer(voice_client.source)
-                    voice_client.source.volume = guild_volumes[guild_id] / 100
-        except Exception:
-            logging.exception("Error setting volume after voice state update")
-
-        if guild_id in bot.timeout_tasks:
-            bot.timeout_tasks[guild_id].cancel()
+        guild = before.channel.guild if before and before.channel else (after.channel.guild if after and after.channel else None)
+        if guild:
+            guild_id = guild.id
+            # If we successfully moved/connected to a channel, clear cooldown so next intentional connect works.
+            if after and after.channel:
+                reconnect_cooldowns[guild_id] = 0
+            try:
+                if guild_id in guild_volumes:
+                    voice_client = guild.voice_client
+                    if voice_client and voice_client.source:
+                        voice_client.source = discord.PCMVolumeTransformer(voice_client.source)
+                        voice_client.source.volume = guild_volumes[guild_id] / 100
+            except Exception:
+                logging.exception("Error setting volume after voice state update")
+            if guild_id in bot.timeout_tasks:
+                bot.timeout_tasks[guild_id].cancel()
 
 async def handle_resume_on_reconnect(guild, voice_channel):
     await asyncio.sleep(2)
@@ -1389,7 +1395,7 @@ async def seek(ctx, position: str):
         if not ctx.voice_client or not ctx.voice_client.is_playing():
             await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
             return
-
+        
         current_track = current_tracks.get(guild_id, {}).get("current_track")
         if not current_track:
             await messagesender(bot, ctx.channel.id, content="There's no track information available to seek.")
@@ -1504,7 +1510,7 @@ async def help_command(ctx):
         reboot            | restart        | Restart the bot
         backupqueue       | None           | Backup current queue
         restorequeue      | None           | Restore a queue
-        banuser @user     | None           | Ban a user from bot
+        banuser @user     | None           | Ban a user from using the bot
         unbanuser @user   | None           | Unban a user
         bannedlist        | None           | Show banned users
         purgequeues       | None           | Clear queues across all servers
@@ -1533,10 +1539,6 @@ async def help_command(ctx):
 @bot.command(name="mute", aliases=["quiet"])
 async def toggle_mute(ctx):
     async with ctx.typing():
-        guild_id = ctx.guild.id
-        if not await check_perms(ctx, guild_id):
-            return
-        
         voice_client = ctx.voice_client
 
         if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
@@ -1811,9 +1813,9 @@ async def fetchlogs(ctx):
             split_path = LOG_FILE + ".7z"
             split_command = f'7z a -t7z -v7m "{split_path}" "{LOG_FILE}"'
             subprocess.run(split_command, shell=True)
-            split_parts = [f for f in os.listdir(os.path.dirname(LOG_FILE)) if f.startswith(os.path.basename(split_path))]
+            split_parts = [f for f in os.listdir(os.path.dirname(split_path) or '.') if f.startswith(os.path.basename(split_path))]
             for part in sorted(split_parts):
-                part_path = os.path.join(os.path.dirname(LOG_FILE), part)
+                part_path = os.path.join(os.path.dirname(split_path) or '.', part)
                 await ctx.author.send(file=discord.File(part_path))
                 os.remove(part_path)
         else:
@@ -1869,58 +1871,88 @@ async def version(ctx):
             await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
 
 @bot.command(name="sendplox", aliases=["dlfile"])
-async def sendmp3(ctx):
+async def sendmp3(ctx, track_id: str = None):
     async with ctx.typing():
         guild_id = ctx.guild.id
         if not await check_perms(ctx, guild_id):
             return
 
-        dir_path = os.path.dirname(os.path.realpath(__file__)).replace("\\", "/")
-        current_track = current_tracks.get(guild_id, {}).get("current_track")
-        
-        if not current_track:
-            await messagesender(bot, ctx.channel.id, content="No current track found.")
-            return
-        
-        base_filename, _ = os.path.splitext(current_track)
-        
-        possible_extensions = [".mp3", ".opus"]
-        
-        file_path = None
-        for ext in possible_extensions:
-            path = f"music/{base_filename}{ext}"
-            if os.path.exists(path):
-                file_path = path
-                break
-        
-        if not file_path:
-            await messagesender(bot, ctx.channel.id, content="File not found.")
-            return
-
-        file_size = os.path.getsize(file_path)
-        if file_size > 8 * 1024 * 1024:
-            zip_path = file_path + ".zip"
-            shutil.make_archive(file_path, 'zip', root_dir=os.path.dirname(file_path), base_dir=os.path.basename(file_path))
-            zip_size = os.path.getsize(zip_path)
-            if zip_size > 8 * 1024 * 1024:
-                split_path = file_path + ".7z"
-                split_command = f'7z a -t7z -v7m "{split_path}" "{file_path}"'
-                subprocess.run(split_command, shell=True)
-                split_parts = [f for f in os.listdir(os.path.dirname(file_path)) if f.startswith(os.path.basename(split_path))]
-                for part in sorted(split_parts):
-                    part_path = os.path.join(os.path.dirname(file_path), part)
-                    await ctx.author.send(file=discord.File(part_path))
-                    os.remove(part_path)
-            else:
-                with open(zip_path, 'rb') as file:
-                    await ctx.author.typing()
-                    await ctx.author.send(file=discord.File(file, filename=os.path.basename(zip_path)))
-                os.remove(zip_path) 
+        # Determine target track id / path
+        current_track_entry = current_tracks.get(guild_id, {}).get("current_track")
+        if track_id is None:
+            if not current_track_entry:
+                await messagesender(bot, ctx.channel.id, content="No current track found and no ID provided.")
+                return
+            raw_id = current_track_entry[0]  # May be youtube id or '|/full/path'
         else:
-            with open(file_path, 'rb') as file:
-                await ctx.author.typing()
-                await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
+            raw_id = track_id
 
+        # If it's a locally injected file (prefixed with '|') strip marker
+        if raw_id.startswith('|'):
+            candidate_paths = [raw_id[1:]]  # absolute or relative path stored
+        else:
+            # If user passed a direct existing path, use it
+            if os.path.isfile(raw_id):
+                candidate_paths = [raw_id]
+            else:
+                base = raw_id
+                # If raw_id has extension already, test directly & in music folder
+                root_name, ext = os.path.splitext(base)
+                candidate_paths = []
+                if ext:
+                    candidate_paths.append(base)
+                    candidate_paths.append(os.path.join('music', base))
+                else:
+                    # Try common extensions in music dir
+                    for e in ('.mp3', '.opus', '.m4a'):
+                        candidate_paths.append(os.path.join('music', base + e))
+
+        audio_path = None
+        for p in candidate_paths:
+            if p and os.path.exists(p):
+                audio_path = p
+                break
+
+        if not audio_path:
+            await messagesender(bot, ctx.channel.id, content=f"File not found for '{raw_id}'.")
+            return
+
+        # Enforce size limit handling (same logic as before)
+        file_size = os.path.getsize(audio_path)
+        discord_limit = 8 * 1024 * 1024  # 8MB default (nitro may vary)
+        try:
+            if file_size > discord_limit:
+                zip_path = audio_path + ".zip"
+                shutil.make_archive(audio_path, 'zip', root_dir=os.path.dirname(audio_path) or '.', base_dir=os.path.basename(audio_path))
+                zip_size = os.path.getsize(zip_path)
+                if zip_size > discord_limit:
+                    split_path = audio_path + ".7z"
+                    split_command = f'7z a -t7z -v7m "{split_path}" "{audio_path}"'
+                    subprocess.run(split_command, shell=True)
+                    split_parts = [f for f in os.listdir(os.path.dirname(split_path) or '.') if f.startswith(os.path.basename(split_path))]
+                    sent_any = False
+                    for part in sorted(split_parts):
+                        part_path = os.path.join(os.path.dirname(split_path) or '.', part)
+                        await ctx.author.send(file=discord.File(part_path))
+                        sent_any = True
+                        os.remove(part_path)
+                    if sent_any:
+                        await messagesender(bot, ctx.channel.id, content="Sent split archive via DM.")
+                    else:
+                        await messagesender(bot, ctx.channel.id, content="Failed to split archive for sending.")
+                else:
+                    with open(zip_path, 'rb') as zf:
+                        await ctx.author.send(file=discord.File(zf, filename=os.path.basename(zip_path)))
+                    os.remove(zip_path)
+                    await messagesender(bot, ctx.channel.id, content="Sent compressed file via DM.")
+            else:
+                with open(audio_path, 'rb') as f:
+                    await ctx.author.send(file=discord.File(f, filename=os.path.basename(audio_path)))
+                await messagesender(bot, ctx.channel.id, content="Sent file via DM.")
+        except discord.Forbidden:
+            await messagesender(bot, ctx.channel.id, content="Cannot DM you the file (privacy settings).");
+        except Exception as e:
+            await messagesender(bot, ctx.channel.id, content=f"Error sending file: {e}")
 
 @bot.command(name="blacklist")
 async def blacklist(ctx, *, song: str):
@@ -2054,7 +2086,11 @@ async def spotify(ctx, url: str):
 
         def _download_sync(ydl_opts, url):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.extract_info("https://music.youtube.com/watch?v=" + url, download=True)
+                try:
+                    info = ydl.extract_info("https://music.youtube.com/watch?v=" + url, download=True)
+                except Exception as e:
+                    logging.error(f"Error in yt_dlp for {url}: {e}")
+                    raise
 
         async def S_download_audio(youtube_link):
             output_path = f"music/{youtube_link}.mp3"
@@ -2262,7 +2298,7 @@ async def send_global_message(ctx, *, message: str):
 
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
-    
+
     try:
         api_url = f"https://api.song.link/v1-alpha.1/links?Country=US&songIfSingle=true&url={url}"
         headers = {
@@ -2323,15 +2359,6 @@ async def get_youtube_video_title(video_id):
         logging.error(f"Error fetching video title from YouTube page: {e}")
         return None
 
-@bot.event
-async def on_message_delete(message):
-    if message.id in message_map:
-        try:
-            await message_map[message.id].delete()
-        except discord.NotFound:
-            pass
-        del message_map[message.id]
-
 async def get_youtube_playlist_title(playlist_id):
     url = f"https://www.youtube.com/playlist?list={playlist_id}"
     
@@ -2361,136 +2388,3 @@ async def get_youtube_playlist_title(playlist_id):
         except (aiohttp.ClientError, json.JSONDecodeError, IndexError, KeyError) as e:
             logging.error(f"Error fetching playlist title: {e}")
             return "Unknown Playlist"
-
-
-async def timeout_handler(ctx):
-    await asyncio.sleep(TIMEOUT_TIME) 
-
-    if ctx.guild.id in bot.voice_clients and ctx.voice_client and ctx.voice_client.is_connected():
-        await ctx.voice_client.disconnect()
-        logging.error(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
-
-async def update_bot_presence():
-    """ Updates the bot's presence based on the stats setting. """
-    if stats_config["show_stats"]:
-        guild_count = len(bot.guilds)
-        await bot.change_presence(activity=discord.Game(name=f"Serving {guild_count} servers"))
-    else:
-        await bot.change_presence(activity=None)
-
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandNotFound):
-        return
-    elif isinstance(error, commands.MissingPermissions):
-        await ctx.send("You don't have permission to do that.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"Missing argument: {error.param.name}")
-    else:
-        await ctx.send(f"An error occurred: {error}")
-        raise error
-
-@bot.command(name="listen")
-async def listen_command(ctx):
-    await start_listening(ctx)
-
-@bot.command(name="unlisten")
-async def unlisten_command(ctx):
-    await stop_listening(ctx)
-
-@bot.command(name="getmetadata")
-async def get_metadata(ctx, filename: str):
-    metadata = metadata_manager.load_metadata(filename)
-    if metadata:
-        await ctx.send(f"Metadata for {filename}:\n```json\n{json.dumps(metadata, indent=4)}```")
-    else:
-        await ctx.send("No metadata found.")
-
-@bot.command(name="fetchmetadata")
-async def fetch_metadata(ctx, filename: str, query: str):
-    if ctx.author.id not in metadata_manager.editor_ids:
-        await ctx.send("You do not have permission to edit metadata.")
-        return
-    metadata = metadata_manager.get_or_fetch_metadata(filename, query)
-    await ctx.send(f"Fetched metadata:\n```json\n{json.dumps(metadata, indent=4)}```")
-
-@bot.command(name="setmetadata")
-async def set_metadata(ctx, filename: str, key: str, value: str):
-    if ctx.author.id not in metadata_manager.editor_ids:
-        await ctx.send("You do not have permission to edit metadata.")
-        return
-    metadata_manager.update_metadata(filename, key, value)
-    await ctx.send(f"Updated {key} in {filename}.")
-
-@bot.command(name="clean")
-async def clean_file(ctx, ID: str):
-    if ctx.author.id not in metadata_manager.editor_ids:
-        await ctx.send("❌ You do not have permission to clean this ID.")
-        return
-
-    file_path = f"music/{ID}"
-    if not os.path.exists(file_path):
-        file_path = f"music/{ID}.mp3"
-    if not os.path.exists(file_path):
-        file_path = f"music/{ID}.opus"
-    if not os.path.exists(file_path):
-        await ctx.send(f"❌ File not found for ID: {ID}")
-        return
-
-    try:
-        os.remove(file_path)
-        await ctx.send(f"✅ Cleaned {ID} from database.")
-    except Exception as e:
-        await ctx.send(f"❌ An error occurred while cleaing ID: {e}")
-
-
-@bot.command(name="addeditor")
-async def add_editor(ctx, user: discord.User):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("You do not have permission to modify editors.")
-        return
-    metadata_manager.add_editor(user.id)
-    await ctx.send(f"Added {user.mention} as a metadata editor.")
-
-@bot.command(name="removeeditor")
-async def remove_editor(ctx, user: discord.User):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("You do not have permission to modify editors.")
-        return
-    metadata_manager.remove_editor(user.id)
-    await ctx.send(f"Removed {user.mention} from metadata editors.")
-
-@bot.command(name="updateyt")
-async def update_yt_dlp(ctx):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("You do not have permission to modify editors.")
-        return
-
-    await messagesender(bot, ctx.channel.id, content="🔄 Updating pip and yt-dlp...")
-    try:
-        pip_proc = await asyncio.create_subprocess_exec(
-            "python3", "-m", "pip", "install", "--upgrade", "pip",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await pip_proc.communicate()
-
-        yt_proc = await asyncio.create_subprocess_exec(
-            "python3", "-m", "pip", "install", "--no-cache-dir", "--upgrade", "--force-reinstall", "yt-dlp",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await yt_proc.communicate()
-
-        if yt_proc.returncode == 0:
-            output = stdout.decode().strip()
-            await messagesender(bot, ctx.channel.id, content=f"✅ yt-dlp updated:\n```\n{output}\n```")
-        else:
-            error = stderr.decode().strip()
-            await messagesender(bot, ctx.channel.id, content=f"❌ Update failed:\n```\n{error}\n```")
-
-    except Exception as e:
-        await messagesender(bot, ctx.channel.id, content=f"❌ Error: {str(e)}")
-
-
-bot.run(BOT_TOKEN)

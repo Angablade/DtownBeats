@@ -1,6 +1,6 @@
 # 🎵 Discord Music Bot
 
-A powerful, feature-rich, and customizable music bot for Discord! Built with Python and discord.py, this bot delivers high-quality audio streaming, playlist support, and intuitive controls directly to your server.
+A powerful, feature-rich, and customizable music bot for Discord! Built with Python and **py-cord** (a maintained fork of discord.py), this bot delivers high-quality audio streaming, playlist support, and intuitive controls directly to your server.
 
 ---
 
@@ -50,6 +50,61 @@ A powerful, feature-rich, and customizable music bot for Discord! Built with Pyt
 - Displays a list of available commands.
 - Invite link generation.
 - Admin-only bot shutdown and reboot commands.
+
+---
+
+## 🆕 Recent Enhancements
+
+### 🔐 Web Panel & API
+- FastAPI powered web panel to view: queues, all guild queues, track history, and music library.
+- Multi-format export (json, xml, yaml, csv, toml) for /queue and /queues endpoints.
+- OAuth2 (Discord) login with session-based access control.
+- Per-guild authorization – users only see queues for guilds they share with the bot.
+- Download endpoint for cached tracks (authorized users only / owner global access).
+- Simple in-browser library search (title / artist / ID) with pagination.
+
+### 🗂 Metadata System
+- Persistent metadata cache with auto-fetch & MusicBrainz enrichment.
+- Owner / editor role system to manually fetch, set, and clean metadata.
+- Album art fetcher + embedding in now playing messages & web panel.
+
+### 🤖 Voice Control (Experimental)
+- Coqui STT integration for voice command recognition inside voice channels.
+- Commands triggered with the hot phrase: "Music bot <command>" (e.g., *Music bot play daft punk*).
+
+### 🔄 Robust Voice Connection Handling
+- Safe connect wrapper with retry & cooldown to mitigate 4006 gateway/session invalid issues.
+- Auto-resume scaffolding (resume intent after reconnect) and volume reapplication.
+- Autoplay of related YouTube tracks when queue becomes empty (optional per guild).
+
+### 🧠 Queue Intelligence
+- Pre-download (preload) of upcoming tracks to minimize playback gaps.
+- Track history per guild (recent 20) exposed in commands & web.
+- Duplicate & similarity filtering when selecting related autoplay tracks.
+
+### 🛡 Moderation & Access Controls
+- Blacklist / whitelist for banned titles (includes fuzzy matching & hard-coded filters).
+- Per-guild DJ role & command channel restriction.
+- User ban system for bot usage.
+
+### 🧰 Maintenance / Admin Utilities
+- Queue backup & restore (guild or global scope).
+- Purge all queues across guilds.
+- Dynamic yt-dlp updater command.
+- Log retrieval with size-based compression & multipart splitting (7z volumes) for large logs.
+- Forced play (owner override) and global broadcast messaging to all reachable guilds.
+
+### 🎛 Playback & UX Improvements
+- Percentage & timestamp seeking (e.g., 1:30 or 50%).
+- Volume persistence per guild (0–200%).
+- Loop toggle, shuffle, move, remove, clear, history recall.
+- Intelligent message chunking and file splitting for Discord upload limits.
+
+### 🧪 Misc
+- Docker friendly layout with persistent config, music, metadata, album art.
+- Intent-driven prefix resolution per guild (dynamic prefixes stored in config JSON).
+
+> Tip: Set SESSION_SECRET in your environment to secure web panel sessions.
 
 ---
 
@@ -116,38 +171,104 @@ Edit `config/server_config.json` to adjust settings such as:
 
 ## 🖥 Commands Overview
 
-### 🎵 **Music Commands**
+Below is the full command catalog (prefix defaults to `!` unless changed with `setprefix`). Aliases are shown in parentheses.
 
-| Command           | Description                          |
-| ----------------- | ------------------------------------ |
-| `!play <query>`   | Play a song or add it to the queue.  |
-| `!stop`           | Stop playback and disconnect.        |
-| `!pause`          | Pause playback.                      |
-| `!resume`         | Resume playback.                     |
-| `!skip`           | Skip the current track.              |
-| `!seek <time>`    | Jump to a specific part of the song. |
-| `!queue`          | Show the upcoming songs.             |
-| `!loop`           | Toggle looping for the current song. |
-| `!volume <0-200>` | Adjust playback volume.              |
-| `!shuffle`        | Shuffle the queue.                   |
+### 🎵 Playback & Queue
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| play <query/link> | — | Play (YouTube search, direct ID/URL, Bandcamp/SoundCloud/Spotify/Apple links) |
+| youtube <query/link> | yt | Explicit YouTube/playlist handler |
+| grablist <query> | grabplaylist | Smart playlist search + bulk add |
+| queue [page] | list | Show queued tracks (paginated) |
+| nowplaying | current, np | Show current track metadata |
+| history | played | Recently played (last 20) |
+| skip | next | Skip current track |
+| pause | hold | Pause playback |
+| resume | continue | Resume playback |
+| stop | — | Stop & clear state (disconnect) |
+| seek <mm:ss / % / seconds> | — | Jump to position in current track |
+| loop | repeat | Toggle looping for current track |
+| shuffle | — | Shuffle queue |
+| remove <index> | — | Remove specific queued item |
+| clear | — | Clear queue |
+| move <from> <to> | — | Reorder a queued item |
+| autoplay <on/off> | autodj | Toggle related-track autoplay when queue empty |
+| volume <0-200> | vol | Set & persist guild volume |
+| mute | quiet | Toggle pause/resume (soft mute) |
+| forceplay <query> | fplay | Owner: insert track to play next immediately |
+| join | come | Join your voice channel |
+| leave | go | Leave voice channel |
+| sendplox | dlfile | DM current track file (zips/splits if large) |
 
-### ⚙️ **Admin & Config Commands**
+### 🌐 External Source Shortcuts
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| bandcamp <url> | bc | Queue Bandcamp track |
+| soundcloud <url> | sc | Queue SoundCloud track |
+| spotify <url> | sp | Track or playlist conversion via YouTube Music |
+| applemusic <url> | ap | Apple Music lookup & queue |
 
-| Command                 | Description                              |
-| ----------------------- | ---------------------------------------- |
-| `!setprefix <prefix>`   | Change the bot's prefix.                 |
-| `!setdjrole <role>`     | Assign a DJ role.                        |
-| `!setchannel <channel>` | Restrict commands to a specific channel. |
-| `!shutdown`             | Shut down the bot (owner only).          |
-| `!reboot`               | Restart the bot (owner only).            |
+### 📝 Metadata & Lyrics
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| lyrics [song] | lyr | Fetch lyrics (current or query) |
+| getmetadata <id> | — | Show cached metadata JSON |
+| fetchmetadata <id> <query> | — | Force refetch/update metadata |
+| setmetadata <id> <key> <value> | — | Manually edit a metadata field |
+| clean <id> | — | Remove local media file for ID |
+| addeditor @user | — | Owner: grant metadata editor rights |
+| removeeditor @user | — | Owner: revoke metadata editor rights |
 
-### 📢 **Utility Commands**
+### 🛡 Moderation & Filtering
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| blacklist <title> | — | Add title to global block list |
+| whitelist <title> | — | Remove title from blacklist |
+| blacklistcheck <title> | — | Check if blacklisted |
+| banuser @user | — | Owner: ban user from bot |
+| unbanuser @user | — | Owner: unban user |
+| bannedlist | — | List banned users |
 
-| Command          | Description                  |
-| ---------------- | ---------------------------- |
-| `!lyrics <song>` | Get song lyrics.             |
-| `!invite`        | Get the bot invite link.     |
-| `!cmds`          | List all available commands. |
+### ⚙️ Configuration
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| setprefix <p> | prefix | Change guild prefix |
+| setdjrole <role> | setrole | Restrict music commands to role |
+| setchannel <#channel> | — | Lock commands to one text channel |
+| debugmode | — | Toggle debug logging mode flag |
+| showstats | — | Toggle dynamic presence (server count) |
+| setnick <name> | nickname | Change bot nickname |
+
+### 📊 Info & Diagnostics
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| stats | — | Bot uptime / memory / guilds |
+| version | ver | Show version / build info |
+| cmds | commands | DM full commands file |
+| invite | link | DM bot invite URL |
+| fetchlogs | logs | Owner: fetch debug log (compress/split) |
+| backupqueue [global] | — | Backup queue(s) to config dir |
+| restorequeue [global] | — | Restore queue(s) from backup |
+| purgequeues | — | Owner: clear all guild queues |
+| updateyt | — | Update pip & force reinstall yt-dlp |
+
+### 🛰 Admin & Control
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| shutdown | die | Owner: stop bot |
+| reboot | restart | Owner: restart process |
+| dockboot | dockerrestart | Owner: run init script & exit |
+| sendglobalmsg <text> | — | Owner: broadcast message |
+| say <guild_id> <channel_id> <msg> | — | Owner (DM only): relay message |
+| forceplay <query> | fplay | Owner: priority insert & play |
+
+### 🎤 Voice Control (Experimental)
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| listen | — | Start STT voice command listener |
+| unlisten | — | Stop STT listener |
+
+Hot phrase: `Music bot <command>` (e.g., “Music bot play daft punk”). Supports: play, pause, resume, stop, skip, shuffle, clear queue, loop, autoplay on/off, leave.
 
 ---
 
@@ -155,9 +276,9 @@ Edit `config/server_config.json` to adjust settings such as:
 
 Special thanks to the amazing open-source projects that make this bot possible:
 
+- [py-cord](https://github.com/Pycord-Development/py-cord) - Discord API library & voice receive (sinks) support.
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Used for YouTube audio extraction.
 - [FFmpeg](https://ffmpeg.org/) - Handles audio processing.
-- [discord.py](https://github.com/Rapptz/discord.py) - The foundation of this bot.
 - [MusicBrainz](https://musicbrainz.org/) - Provides metadata for songs.
 
 ---
@@ -176,7 +297,6 @@ This project is licensed under the Unlicense.
 
 ### 🌟 Enjoy the "best" music experience on Discord! 🎧
 
----
 
 ```r
 welcome to the idiotlanparty

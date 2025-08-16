@@ -5,14 +5,16 @@ set -e
 # Update and install dependencies
 apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full apt-utils libopus-dev
 
-# Upgrade pip and install necessary Python packages
+# Upgrade pip
 pip install --upgrade pip
-pip install --no-cache-dir "pybind11>=2.12" "numpy<2" discord.py pyyaml requests yt-dlp asyncio aiohttp pillow \
-    musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein spotdl \
-    stt fastapi uvicorn httpx python-multipart python-dotenv authlib starlette
 
-# If you serve static files with Starlette/StaticFiles, also add:
-pip install aiofiles
+# Remove any conflicting legacy discord packages
+pip uninstall -y discord.py discord 2>/dev/null || true
+
+# Install Python packages (py-cord instead of discord.py)
+pip install --no-cache-dir "pybind11>=2.12" "numpy<2" py-cord pyyaml requests yt-dlp asyncio aiohttp pillow \
+    musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein spotdl \
+    stt fastapi uvicorn httpx python-multipart python-dotenv authlib starlette itsdangerous
 
 # Ensure necessary directories exist
 for dir in /app/{lyrics,music,config,models,sources,utils,albumart,metacache,static}; do
