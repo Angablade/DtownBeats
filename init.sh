@@ -59,7 +59,7 @@ fi
 
 # Update and install dependencies (only in Docker)
 if is_docker; then
-    apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full apt-utils libopus-dev
+    apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full apt-utils libopus-dev psutil
     
     # Upgrade pip
     pip install --upgrade pip
@@ -70,7 +70,7 @@ if is_docker; then
     # Install Python packages (py-cord instead of discord.py)
     pip install --no-cache-dir "pybind11>=2.12" "numpy<2" py-cord pyyaml requests yt-dlp asyncio aiohttp pillow \
         musicbrainzngs beautifulsoup4 aiofiles ffmpeg-python ffmpeg PyNaCl fuzzywuzzy python-Levenshtein spotdl \
-        stt fastapi uvicorn httpx python-multipart python-dotenv authlib starlette itsdangerous
+        stt fastapi uvicorn httpx python-multipart python-dotenv authlib starlette itsdangerous psutil
 else
     echo "?? Local environment detected. Please ensure all dependencies are installed manually."
     echo "Run: pip install -r requirements.txt"

@@ -57,7 +57,15 @@ class Music(commands.Cog):
         try:
             with open("config/server_config.json", 'r') as f:
                 config = json.load(f)
-        def save_volume_settings(self, volume_data):
+        except:
+            config = {}
+        if str(guild_id) not in config:
+            config[str(guild_id)] = {"prefix": "!", "dj_role": None, "channel": None, "autoplay": False}
+        config[str(guild_id)][key] = value
+        with open("config/server_config.json", 'w') as f:
+            json.dump(config, f, indent=4)
+
+    def save_volume_settings(self, volume_data):
         """Save volume settings"""
         with open(self.VOLUME_CONFIG_PATH, "w") as f:
             json.dump(volume_data, f, indent=4)
