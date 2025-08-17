@@ -6,6 +6,7 @@ import threading
 import json
 import csv
 import io
+import time
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResponse, FileResponse
 from starlette.staticfiles import StaticFiles
@@ -45,6 +46,30 @@ metadata_manager = MetadataManager(
 server_queues = {}
 now_playing = {}
 track_history = {}
+
+# Add OAuth setup at module level
+oauth = OAuth()
+
+def initialize_oauth():
+    """Initialize OAuth client if credentials are available"""
+    discord_client_id = os.getenv('DISCORD_CLIENT_ID')
+    discord_client_secret = os.getenv('DISCORD_CLIENT_SECRET')
+    
+    if discord_client_id and discord_client_secret:
+        oauth.register(
+            name='discord',
+            client_id=discord_client_id,
+            client_secret=discord_client_secret,
+            server_metadata_url='https://discord.com/.well-known/openid_connect',
+            client_kwargs={
+                'scope': 'identify guilds'
+            }
+        )
+        return True
+    return False
+
+# Initialize OAuth on import
+oauth_available = initialize_oauth()
 
 def dict_to_xml(data, root_element="data"):
     """
@@ -371,11 +396,15 @@ def user_in_guild(request: Request, guild_id: str) -> bool:
 
 @app.get('/login')
 async def login(request: Request):
+    if not oauth_available:
+        return HTMLResponse(content="<h1>Discord OAuth not configured</h1><p>Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET environment variables.</p>")
     redirect_uri = request.url_for('auth')
     return await oauth.discord.authorize_redirect(request, redirect_uri)
 
 @app.get('/auth')
 async def auth(request: Request):
+    if not oauth_available:
+        return HTMLResponse(content="<h1>Discord OAuth not configured</h1>")
     token = await oauth.discord.authorize_access_token(request)
     user = await oauth.discord.get('users/@me', token=token)
     guilds = await oauth.discord.get('users/@me/guilds', token=token)
@@ -387,6 +416,45 @@ async def auth(request: Request):
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url='/')
+
+@app.get("/", response_class=HTMLResponse)
+async def home():
+    """Home page with navigation links"""
+    html_content = """
+    <html>
+      <head>
+        <title>DtownBeats Music Bot</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+          .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+          h1 { color: #333; text-align: center; }
+          .nav { text-align: center; margin: 20px 0; }
+          .nav a { margin: 0 10px; padding: 10px 20px; background: #7289da; color: white; text-decoration: none; border-radius: 5px; }
+          .nav a:hover { background: #5b6eae; }
+          .status { background: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>?? DtownBeats Music Bot</h1>
+          <div class="nav">
+            <a href="/queues">View Queues</a>
+            <a href="/library">Music Library</a>
+            <a href="/health">Health Check</a>
+            <a href="/login">Login with Discord</a>
+          </div>
+          <div class="status">
+            <h3>Bot Status</h3>
+            <p><strong>Guilds:</strong> """ + str(len(server_queues)) + """</p>
+            <p><strong>Active Queues:</strong> """ + str(len([q for q in server_queues.values() if not q.empty()])) + """</p>
+            <p><strong>Now Playing:</strong> """ + str(len(now_playing)) + """</p>
+            <p><strong>OAuth Configured:</strong> """ + ("Yes" if oauth_available else "No") + """</p>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 @app.get("/queue", response_class=HTMLResponse)
 async def get_queue(request: Request, guild_id: str = Query(..., description="Guild ID for which to fetch the queue"),
@@ -543,6 +611,75 @@ async def music_library(request: Request, q: str = "", page: int = 1, per_page: 
         html_content += f'<a href="?q={html.escape(q)}&per_page={per_page}&page={page+1}">Next</a>'
     html_content += "</div>"
     return HTMLResponse(content=html_content)
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Docker and monitoring"""
+    try:
+        # Basic health checks
+        health_status = {
+            "status": "healthy",
+            "timestamp": str(time.time()),
+            "guilds": len(server_queues),
+            "active_queues": len([q for q in server_queues.values() if not q.empty()]),
+            "now_playing": len(now_playing),
+            "oauth_configured": oauth_available
+        }
+        return JSONResponse(content=health_status, status_code=200)
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "unhealthy", 
+                "error": str(e),
+                "timestamp": str(time.time())
+            }, 
+            status_code=503
+        )
+
+@app.get("/metrics")
+async def metrics_endpoint(request: Request):
+    """Detailed metrics endpoint (owner only)"""
+    user = request.session.get('user')
+    if not user or not is_owner(user['id']):
+        raise HTTPException(status_code=403, detail="Owner access required")
+    
+    import psutil
+    import platform
+    
+    # System metrics
+    cpu_percent = psutil.cpu_percent(interval=1)
+    memory = psutil.virtual_memory()
+    disk = psutil.disk_usage('/')
+    network = psutil.net_io_counters()
+    
+    # Bot metrics
+    total_tracks_queued = sum(q.qsize() for q in server_queues.values())
+    total_history = sum(len(hist) for hist in track_history.values())
+    
+    metrics = {
+        "system": {
+            "platform": platform.system(),
+            "cpu_percent": cpu_percent,
+            "memory_total_gb": round(memory.total / (1024**3), 2),
+            "memory_used_gb": round(memory.used / (1024**3), 2),
+            "memory_percent": memory.percent,
+            "disk_total_gb": round(disk.total / (1024**3), 2),
+            "disk_used_gb": round(disk.used / (1024**3), 2),
+            "disk_percent": disk.percent,
+            "network_sent_mb": round(network.bytes_sent / (1024**2), 1),
+            "network_recv_mb": round(network.bytes_recv / (1024**2), 1)
+        },
+        "bot": {
+            "guilds": len(server_queues),
+            "active_queues": len([q for q in server_queues.values() if not q.empty()]),
+            "total_tracks_queued": total_tracks_queued,
+            "now_playing_count": len(now_playing),
+            "total_history_tracks": total_history,
+            "oauth_configured": oauth_available
+        }
+    }
+    
+    return JSONResponse(content=metrics)
 
 def run_web_app():
     uvicorn.run(app, host="0.0.0.0", port=80)
