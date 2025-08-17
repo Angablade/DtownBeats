@@ -46,13 +46,13 @@ class Voice(commands.Cog):
                 try:
                     voice_client = await channel.connect()
                     if voice_client and voice_client.is_connected():
-                        await self.messagesender(ctx.channel.id, f"? Joined **{channel.name}** voice channel. ??")
+                        await self.messagesender(ctx.channel.id, f"Joined {channel.name} voice channel.")
                     else:
-                        await self.messagesender(ctx.channel.id, f"? Failed to join **{channel.name}**.")
+                        await self.messagesender(ctx.channel.id, f"Failed to join {channel.name}.")
                 except Exception as e:
-                    await self.messagesender(ctx.channel.id, f"? Failed to join **{channel.name}**: {e}")
+                    await self.messagesender(ctx.channel.id, f"Failed to join {channel.name}: {e}")
             else:
-                await self.messagesender(ctx.channel.id, content="? You need to be in a voice channel for me to join!")
+                await self.messagesender(ctx.channel.id, content="You need to be in a voice channel for me to join!")
 
     @commands.command(name="leave", aliases=["go"])
     async def leave_channel(self, ctx):
@@ -66,7 +66,7 @@ class Voice(commands.Cog):
                 intentional_disconnections = getattr(self.bot, 'intentional_disconnections', {})
                 intentional_disconnections[guild_id] = True
                 await ctx.voice_client.disconnect()
-                await self.messagesender(ctx.channel.id, content="Disconnected from the voice channel. ??")
+                await self.messagesender(ctx.channel.id, content="Disconnected from the voice channel.")
             else:
                 await self.messagesender(ctx.channel.id, content="I'm not in a voice channel to leave.")
 
@@ -83,10 +83,10 @@ class Voice(commands.Cog):
             if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
                 if voice_client.is_paused():
                     voice_client.resume()
-                    await self.messagesender(ctx.channel.id, content="Unmuted the bot. ??")
+                    await self.messagesender(ctx.channel.id, content="Unmuted the bot.")
                 else:
                     voice_client.pause()
-                    await self.messagesender(ctx.channel.id, content="Muted the bot. ??")
+                    await self.messagesender(ctx.channel.id, content="Muted the bot.")
             else:
                 await self.messagesender(ctx.channel.id, content="I'm not playing anything to mute or unmute.")
 

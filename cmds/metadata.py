@@ -53,7 +53,7 @@ class Metadata(commands.Cog):
             return
             
         if ctx.author.id not in self.metadata_manager.editor_ids:
-            await ctx.send("? You do not have permission to clean this ID.")
+            await ctx.send("You do not have permission to clean this ID.")
             return
 
         file_path = f"music/{ID}"
@@ -62,14 +62,14 @@ class Metadata(commands.Cog):
         if not os.path.exists(file_path):
             file_path = f"music/{ID}.opus"
         if not os.path.exists(file_path):
-            await ctx.send(f"? File not found for ID: {ID}")
+            await ctx.send(f"File not found for ID: {ID}")
             return
 
         try:
             os.remove(file_path)
-            await ctx.send(f"? Cleaned {ID} from database.")
+            await ctx.send(f"Cleaned {ID} from database.")
         except Exception as e:
-            await ctx.send(f"? An error occurred while cleaning ID: {e}")
+            await ctx.send(f"An error occurred while cleaning ID: {e}")
 
     @commands.command(name="addeditor")
     async def add_editor(self, ctx, user: discord.User):

@@ -68,7 +68,7 @@ class Admin(commands.Cog):
     async def health_check(self, ctx):
         """Get bot health status (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="? You don't have permission to use this command.")
+            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
             return
 
         try:
@@ -83,15 +83,15 @@ class Admin(commands.Cog):
             
             # Create embed
             embed = discord.Embed(
-                title="?? Bot Health Status",
+                title="Bot Health Status",
                 color=discord.Color.green(),
                 timestamp=discord.utils.utcnow()
             )
             
             # Bot status
             embed.add_field(
-                name="?? Bot Status",
-                value=f"**Status:** ? Healthy\n"
+                name="Bot Status",
+                value=f"**Status:** Healthy\n"
                       f"**Uptime:** {int(uptime // 3600)}h {int((uptime % 3600) // 60)}m\n"
                       f"**Guilds:** {len(self.bot.guilds)}\n"
                       f"**Ping:** {round(self.bot.latency * 1000)}ms",
@@ -100,7 +100,7 @@ class Admin(commands.Cog):
             
             # System resources
             embed.add_field(
-                name="?? System Resources",
+                name="System Resources",
                 value=f"**CPU:** {cpu_percent}%\n"
                       f"**Memory:** {memory.percent}% ({round(memory.available / (1024**3), 1)}GB free)\n"
                       f"**Disk:** {disk.percent}% ({round(disk.free / (1024**3), 1)}GB free)",
@@ -112,7 +112,7 @@ class Admin(commands.Cog):
             total_queued = sum(q.qsize() for q in server_queues.values())
             
             embed.add_field(
-                name="?? Music Activity",
+                name="Music Activity",
                 value=f"**Active Queues:** {active_queues}\n"
                       f"**Now Playing:** {len(now_playing)}\n"
                       f"**Total Queued:** {total_queued}",
@@ -125,13 +125,13 @@ class Admin(commands.Cog):
             await self.messagesender(ctx.channel.id, embed=embed)
             
         except Exception as e:
-            await self.messagesender(ctx.channel.id, content=f"? Error getting health status: {e}")
+            await self.messagesender(ctx.channel.id, content=f"Error getting health status: {e}")
 
     @commands.command(name="metrics", aliases=["sysinfo"])
     async def detailed_metrics(self, ctx):
         """Get detailed system metrics (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="? You don't have permission to use this command.")
+            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
             return
 
         try:
@@ -156,14 +156,14 @@ class Admin(commands.Cog):
             
             # Create embeds (split due to Discord limits)
             embed1 = discord.Embed(
-                title="?? Detailed System Metrics",
+                title="Detailed System Metrics",
                 color=discord.Color.blue(),
                 timestamp=discord.utils.utcnow()
             )
             
             # System info
             embed1.add_field(
-                name="??? System Information",
+                name="System Information",
                 value=f"**Platform:** {platform.system()} {platform.release()}\n"
                       f"**Architecture:** {platform.machine()}\n"
                       f"**Python:** {platform.python_version()}\n"
@@ -173,7 +173,7 @@ class Admin(commands.Cog):
             
             # CPU & Memory
             embed1.add_field(
-                name="? CPU & Memory",
+                name="CPU & Memory",
                 value=f"**CPU Usage:** {cpu_percent}%\n"
                       f"**CPU Cores:** {cpu_count}\n"
                       f"**Memory Total:** {round(memory.total / (1024**3), 2)}GB\n"
@@ -184,7 +184,7 @@ class Admin(commands.Cog):
             
             # Disk & Network
             embed1.add_field(
-                name="?? Disk & Network",
+                name="Disk & Network",
                 value=f"**Disk Total:** {round(disk.total / (1024**3), 2)}GB\n"
                       f"**Disk Used:** {round(disk.used / (1024**3), 2)}GB ({disk.percent}%)\n"
                       f"**Disk Free:** {round(disk.free / (1024**3), 2)}GB\n"
@@ -195,13 +195,13 @@ class Admin(commands.Cog):
             
             # Bot metrics embed
             embed2 = discord.Embed(
-                title="?? Bot Metrics",
+                title="Bot Metrics",
                 color=discord.Color.green(),
                 timestamp=discord.utils.utcnow()
             )
             
             embed2.add_field(
-                name="?? Bot Statistics",
+                name="Bot Statistics",
                 value=f"**Uptime:** {int(uptime // 86400)}d {int((uptime % 86400) // 3600)}h {int((uptime % 3600) // 60)}m\n"
                       f"**Guilds:** {len(self.bot.guilds)}\n"
                       f"**Latency:** {round(self.bot.latency * 1000)}ms\n"
@@ -210,7 +210,7 @@ class Admin(commands.Cog):
             )
             
             embed2.add_field(
-                name="?? Music Statistics",
+                name="Music Statistics",
                 value=f"**Active Queues:** {len([q for q in server_queues.values() if not q.empty()])}\n"
                       f"**Total Tracks Queued:** {total_tracks_queued}\n"
                       f"**Now Playing Count:** {len(now_playing)}\n"
@@ -223,7 +223,7 @@ class Admin(commands.Cog):
                 top_queues = sorted(queue_sizes.items(), key=lambda x: x[1], reverse=True)[:5]
                 queue_text = "\n".join([f"**{guild_id}:** {size}" for guild_id, size in top_queues])
                 embed2.add_field(
-                    name="?? Top Queues",
+                    name="Top Queues",
                     value=queue_text or "No active queues",
                     inline=False
                 )
@@ -232,14 +232,14 @@ class Admin(commands.Cog):
             await self.messagesender(ctx.channel.id, embed=embed2)
             
         except Exception as e:
-            await self.messagesender(ctx.channel.id, content=f"? Error getting metrics: {e}")
+            await self.messagesender(ctx.channel.id, content=f"Error getting metrics: {e}")
             logging.error(f"Error in metrics command: {e}")
 
     @commands.command(name="webpanel", aliases=["panel", "web"])
     async def web_panel_info(self, ctx):
         """Get web panel access information (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="? You don't have permission to use this command.")
+            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         web_port = os.getenv('WEB_PORT', '80')
@@ -247,13 +247,13 @@ class Admin(commands.Cog):
         discord_client_id = os.getenv('DISCORD_CLIENT_ID', '')
         
         embed = discord.Embed(
-            title="?? Web Panel Information",
+            title="Web Panel Information",
             color=discord.Color.purple(),
             timestamp=discord.utils.utcnow()
         )
         
         embed.add_field(
-            name="?? Access Information",
+            name="Access Information",
             value=f"**Port:** {web_port}\n"
                   f"**Health Check:** `/health`\n"
                   f"**Metrics:** `/metrics`\n"
@@ -263,27 +263,27 @@ class Admin(commands.Cog):
         )
         
         embed.add_field(
-            name="?? OAuth Status",
-            value=f"**Client ID Configured:** {'?' if discord_client_id else '?'}\n"
-                  f"**Session Secret:** {'? Set' if session_secret != 'change_me_secret' else '?? Default'}\n"
-                  f"**OAuth Available:** {'?' if discord_client_id else '?'}",
+            name="OAuth Status",
+            value=f"**Client ID Configured:** {'Yes' if discord_client_id else 'No'}\n"
+                  f"**Session Secret:** {'Set' if session_secret != 'change_me_secret' else 'Default'}\n"
+                  f"**OAuth Available:** {'Yes' if discord_client_id else 'No'}",
             inline=True
         )
         
         embed.add_field(
-            name="?? Quick Links",
+            name="Quick Links",
             value="**Endpoints:**\n"
-                  "• `/health` - Health status\n"
-                  "• `/metrics` - Detailed metrics\n"
-                  "• `/queues` - All guild queues\n"
-                  "• `/library` - Music library\n"
-                  "• `/login` - Discord OAuth login",
+                  "- `/health` - Health status\n"
+                  "- `/metrics` - Detailed metrics\n"
+                  "- `/queues` - All guild queues\n"
+                  "- `/library` - Music library\n"
+                  "- `/login` - Discord OAuth login",
             inline=False
         )
         
         if session_secret == 'change_me_secret':
             embed.add_field(
-                name="?? Security Warning",
+                name="Security Warning",
                 value="The SESSION_SECRET is still set to default. Please update it for security!",
                 inline=False
             )
