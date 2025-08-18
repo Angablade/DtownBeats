@@ -521,9 +521,6 @@ async def on_ready():
                 file_path = os.path.join('static', f"{guild.id}.png")
                 if not os.path.exists(file_path):
                     await download_guild_icon(guild)
-                    
-        # Load all cogs
-        await load_cogs()
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
 
@@ -544,7 +541,7 @@ async def load_cogs():
     
     for cog in cogs:
         try:
-            await bot.load_extension(cog)
+            bot.load_extension(cog)
             logging.info(f"Loaded cog: {cog}")
         except Exception as e:
             logging.error(f"Failed to load cog {cog}: {e}")
@@ -979,6 +976,6 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     # Auto-play next track
     if voice_client and voice_client.is_connected() and not bot.intentional_disconnections.get(guild_id, False):
         await play_next(ctx, voice_client)
-
+load_cogs()
 bot.run(BOT_TOKEN)
 
