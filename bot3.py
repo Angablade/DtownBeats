@@ -41,6 +41,17 @@ from discord import FFmpegPCMAudio, Embed
 from discord.errors import ClientException
 from fuzzywuzzy import fuzz
 
+from cmds.admin import Admin
+from cmds.config import Config
+from cmds.events import Events
+from cmds.info import Info
+from cmds.lyrics import LyricsCog
+from cmds.metadata import Metadata
+from cmds.moderation import Moderation
+from cmds.music import Music
+from cmds.queue import Queue
+from cmds.voice import Voice
+
 # Load configuration from file or environment
 app_config = load_config_from_file_or_env()
 
@@ -950,16 +961,16 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
 async def load_cogs():
     """Load all cog files"""
     cogs = [
-        'cmds.music',
-        'cmds.queue', 
-        'cmds.voice',
-        'cmds.config',
-        'cmds.admin',
-        'cmds.moderation',
-        'cmds.info',
-        'cmds.lyrics',
-        'cmds.metadata',
-        'cmds.events'
+        Music(bot),
+        Queue(bot),
+        Voice(bot),
+        Config(bot),
+        Admin(bot),
+        Moderation(bot),
+        Info(bot),
+        Lyrics(bot),
+        Metadata(bot),
+        Events(bot)
     ]
     
     for cog in cogs:
