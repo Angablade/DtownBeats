@@ -251,6 +251,3 @@ class LyricsCog(commands.Cog):
 
             except Exception as e:
                 await messagesender(self.bot, ctx.channel.id, f"An error occurred: {e}")
-
-async def setup(bot):
-    await bot.add_cog(LyricsCog(bot))

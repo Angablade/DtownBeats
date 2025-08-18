@@ -8,9 +8,14 @@ import sys
 import asyncio
 import json
 import time
-import psutil
-import platform
 import logging
+try:
+    import psutil
+except ImportError:
+    psutil = None
+    
+import platform
+from utils.common import messagesender
 
 class Admin(commands.Cog):
     def __init__(self, bot):
@@ -18,22 +23,6 @@ class Admin(commands.Cog):
         self.BOT_OWNER_ID = int(os.getenv("BOT_OWNER_ID", 123456789))
         self.QUEUE_BACKUP_DIR = "config/queuebackup/"
         self.LOG_FILE = "config/debug.log"
-
-    async def messagesender(self, channel_id, content=None, embed=None):
-        """Send messages to Discord channels"""
-        channel = self.bot.get_channel(channel_id)
-        if not channel:
-            return
-        
-        try:
-            if content and embed:
-                await channel.send(content=content, embed=embed)
-            elif content:
-                await channel.send(content)
-            elif embed:
-                await channel.send(embed=embed)
-        except Exception as e:
-            print(f"Error sending message: {e}")
 
     def get_backup_path(self, guild_id=None):
         """Get backup file path"""
@@ -68,14 +57,19 @@ class Admin(commands.Cog):
     async def health_check(self, ctx):
         """Get bot health status (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
 
         try:
-            # Get system stats
-            cpu_percent = psutil.cpu_percent(interval=1)
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            # Get system stats if psutil is available
+            if psutil:
+                cpu_percent = psutil.cpu_percent(interval=1)
+                memory = psutil.virtual_memory()
+                disk = psutil.disk_usage('/')
+            else:
+                cpu_percent = "N/A"
+                memory = type('obj', (object,), {'percent': 'N/A', 'available': 0})()
+                disk = type('obj', (object,), {'percent': 'N/A', 'free': 0})()
             
             uptime = time.time() - getattr(self.bot, 'start_time', time.time())
             server_queues = getattr(self.bot, 'server_queues', {})
@@ -99,13 +93,20 @@ class Admin(commands.Cog):
             )
             
             # System resources
-            embed.add_field(
-                name="System Resources",
-                value=f"**CPU:** {cpu_percent}%\n"
-                      f"**Memory:** {memory.percent}% ({round(memory.available / (1024**3), 1)}GB free)\n"
-                      f"**Disk:** {disk.percent}% ({round(disk.free / (1024**3), 1)}GB free)",
-                inline=True
-            )
+            if psutil:
+                embed.add_field(
+                    name="System Resources",
+                    value=f"**CPU:** {cpu_percent}%\n"
+                          f"**Memory:** {memory.percent}% ({round(memory.available / (1024**3), 1)}GB free)\n"
+                          f"**Disk:** {disk.percent}% ({round(disk.free / (1024**3), 1)}GB free)",
+                    inline=True
+                )
+            else:
+                embed.add_field(
+                    name="System Resources",
+                    value="**System monitoring not available**\n(psutil not installed)",
+                    inline=True
+                )
             
             # Music activity
             active_queues = len([q for q in server_queues.values() if not q.empty()])
@@ -122,26 +123,33 @@ class Admin(commands.Cog):
             # Add platform info
             embed.set_footer(text=f"Platform: {platform.system()} {platform.release()}")
             
-            await self.messagesender(ctx.channel.id, embed=embed)
+            await messagesender(self.bot, ctx.channel.id, embed=embed)
             
         except Exception as e:
-            await self.messagesender(ctx.channel.id, content=f"Error getting health status: {e}")
+            await messagesender(self.bot, ctx.channel.id, content=f"Error getting health status: {e}")
 
     @commands.command(name="metrics", aliases=["sysinfo"])
     async def detailed_metrics(self, ctx):
         """Get detailed system metrics (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
 
         try:
             # System metrics
-            cpu_percent = psutil.cpu_percent(interval=1)
-            cpu_count = psutil.cpu_count()
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
-            network = psutil.net_io_counters()
-            boot_time = psutil.boot_time()
+            if psutil:
+                cpu_percent = psutil.cpu_percent(interval=1)
+                cpu_count = psutil.cpu_count()
+                memory = psutil.virtual_memory()
+                disk = psutil.disk_usage('/')
+                network = psutil.net_io_counters()
+                boot_time = psutil.boot_time()
+            else:
+                cpu_percent = cpu_count = "N/A"
+                memory = type('obj', (object,), {'total': 0, 'used': 0, 'percent': 'N/A', 'available': 0})()
+                disk = type('obj', (object,), {'total': 0, 'used': 0, 'percent': 'N/A', 'free': 0})()
+                network = type('obj', (object,), {'bytes_sent': 0, 'bytes_recv': 0})()
+                boot_time = time.time()
             
             # Bot metrics
             uptime = time.time() - getattr(self.bot, 'start_time', time.time())
@@ -172,26 +180,33 @@ class Admin(commands.Cog):
             )
             
             # CPU & Memory
-            embed1.add_field(
-                name="CPU & Memory",
-                value=f"**CPU Usage:** {cpu_percent}%\n"
-                      f"**CPU Cores:** {cpu_count}\n"
-                      f"**Memory Total:** {round(memory.total / (1024**3), 2)}GB\n"
-                      f"**Memory Used:** {round(memory.used / (1024**3), 2)}GB ({memory.percent}%)\n"
-                      f"**Memory Available:** {round(memory.available / (1024**3), 2)}GB",
-                inline=True
-            )
-            
-            # Disk & Network
-            embed1.add_field(
-                name="Disk & Network",
-                value=f"**Disk Total:** {round(disk.total / (1024**3), 2)}GB\n"
-                      f"**Disk Used:** {round(disk.used / (1024**3), 2)}GB ({disk.percent}%)\n"
-                      f"**Disk Free:** {round(disk.free / (1024**3), 2)}GB\n"
-                      f"**Network Sent:** {round(network.bytes_sent / (1024**2), 1)}MB\n"
-                      f"**Network Received:** {round(network.bytes_recv / (1024**2), 1)}MB",
-                inline=True
-            )
+            if psutil:
+                embed1.add_field(
+                    name="CPU & Memory",
+                    value=f"**CPU Usage:** {cpu_percent}%\n"
+                          f"**CPU Cores:** {cpu_count}\n"
+                          f"**Memory Total:** {round(memory.total / (1024**3), 2)}GB\n"
+                          f"**Memory Used:** {round(memory.used / (1024**3), 2)}GB ({memory.percent}%)\n"
+                          f"**Memory Available:** {round(memory.available / (1024**3), 2)}GB",
+                    inline=True
+                )
+                
+                # Disk & Network
+                embed1.add_field(
+                    name="Disk & Network",
+                    value=f"**Disk Total:** {round(disk.total / (1024**3), 2)}GB\n"
+                          f"**Disk Used:** {round(disk.used / (1024**3), 2)}GB ({disk.percent}%)\n"
+                          f"**Disk Free:** {round(disk.free / (1024**3), 2)}GB\n"
+                          f"**Network Sent:** {round(network.bytes_sent / (1024**2), 1)}MB\n"
+                          f"**Network Received:** {round(network.bytes_recv / (1024**2), 1)}MB",
+                    inline=True
+                )
+            else:
+                embed1.add_field(
+                    name="System Resources",
+                    value="**System monitoring not available**\n(psutil not installed)",
+                    inline=False
+                )
             
             # Bot metrics embed
             embed2 = discord.Embed(
@@ -228,18 +243,18 @@ class Admin(commands.Cog):
                     inline=False
                 )
             
-            await self.messagesender(ctx.channel.id, embed=embed1)
-            await self.messagesender(ctx.channel.id, embed=embed2)
+            await messagesender(self.bot, ctx.channel.id, embed=embed1)
+            await messagesender(self.bot, ctx.channel.id, embed=embed2)
             
         except Exception as e:
-            await self.messagesender(ctx.channel.id, content=f"Error getting metrics: {e}")
+            await messagesender(self.bot, ctx.channel.id, content=f"Error getting metrics: {e}")
             logging.error(f"Error in metrics command: {e}")
 
     @commands.command(name="webpanel", aliases=["panel", "web"])
     async def web_panel_info(self, ctx):
         """Get web panel access information (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         web_port = os.getenv('WEB_PORT', '80')
@@ -288,32 +303,38 @@ class Admin(commands.Cog):
                 inline=False
             )
         
-        await self.messagesender(ctx.channel.id, embed=embed)
+        await messagesender(self.bot, ctx.channel.id, embed=embed)
 
     @commands.command(name="shutdown", aliases=["die"])
     async def shutdown(self, ctx):
+        """Shutdown the bot (Owner only)"""
+        logging.info(f"Requesting ID: {ctx.author.id}\nOwner ID:{self.BOT_OWNER_ID}")
         if ctx.author.id == self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="Shutting down.")
+            await messagesender(self.bot, ctx.channel.id, content="Shutting down.")
             await self.bot.close()
         else:
-            await self.messagesender(ctx.channel.id, content="You do not have permission to shut down the bot.")
+            await messagesender(self.bot, ctx.channel.id, content="You do not have permission to shut down the bot.")
 
     @commands.command(name="reboot", aliases=["restart"])
     async def reboot(self, ctx):
+        """Restart the bot (Owner only)"""
+        logging.info(f"Requesting ID: {ctx.author.id}\nOwner ID:{self.BOT_OWNER_ID}")
         if ctx.author.id == self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="Restarting the bot...")
+            await messagesender(self.bot, ctx.channel.id, content="Restarting the bot...")
             os.execv(sys.executable, ['python'] + sys.argv)
         else:
-            await self.messagesender(ctx.channel.id, content="You do not have permission to restart the bot.")
+            await messagesender(self.bot, ctx.channel.id, content="You do not have permission to restart the bot.")
 
     @commands.command(name="dockboot", aliases=["dockerrestart"])
     async def dockboot(self, ctx):
+        """Docker restart (Owner only)"""
+        logging.info(f"Requesting ID: {ctx.author.id}\nOwner ID: {self.BOT_OWNER_ID}")
         if ctx.author.id == self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="Shutting down and restarting")
+            await messagesender(self.bot, ctx.channel.id, content="Shutting down and restarting")
             subprocess.Popen(["/bin/bash", "init.sh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             os._exit(0)  
         else:
-            await self.messagesender(ctx.channel.id, content="You do not have permission to restart the bot.")
+            await messagesender(self.bot, ctx.channel.id, content="You do not have permission to restart the bot.")
 
     @commands.command(name="say")
     async def say(self, ctx, guild_id: int, channel_id: int, *, message: str):
@@ -348,21 +369,23 @@ class Admin(commands.Cog):
 
     @commands.command(name="backupqueue")
     async def backup_queue(self, ctx, scope: str = "guild"):
+        """Backup queue (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         if scope == "global":
             self.save_queue_backup()
-            await self.messagesender(ctx.channel.id, content="Global queue backup saved.")
+            await messagesender(self.bot, ctx.channel.id, content="Global queue backup saved.")
         else:
             self.save_queue_backup(ctx.guild.id)
-            await self.messagesender(ctx.channel.id, content=f"Queue backup saved for {ctx.guild.name}.")
+            await messagesender(self.bot, ctx.channel.id, content=f"Queue backup saved for {ctx.guild.name}.")
 
     @commands.command(name="restorequeue")
     async def restore_queue(self, ctx, scope: str = "guild"):
+        """Restore queue from backup (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         server_queues = getattr(self.bot, 'server_queues', {})
@@ -374,19 +397,20 @@ class Admin(commands.Cog):
                     server_queues[gid] = asyncio.Queue()
                 for item in queue_data:
                     await server_queues[gid].put(item)
-            await self.messagesender(ctx.channel.id, content="Global queue restored.")
+            await messagesender(self.bot, ctx.channel.id, content="Global queue restored.")
         else:
             backup_data = self.load_queue_backup(ctx.guild.id)
             if ctx.guild.id not in server_queues:
                 server_queues[ctx.guild.id] = asyncio.Queue()
             for item in backup_data.get(str(ctx.guild.id), []):
                 await server_queues[ctx.guild.id].put(item)
-            await self.messagesender(ctx.channel.id, content=f"Queue restored for {ctx.guild.name}.")
+            await messagesender(self.bot, ctx.channel.id, content=f"Queue restored for {ctx.guild.name}.")
 
     @commands.command(name="purgequeues")
     async def purge_queues(self, ctx):
+        """Purge all queues (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         server_queues = getattr(self.bot, 'server_queues', {})
@@ -397,12 +421,13 @@ class Admin(commands.Cog):
                 server_queues[guild_id] = asyncio.Queue()
                 cleared_count += 1
         
-        await self.messagesender(ctx.channel.id, content=f"Cleared queues for {cleared_count} servers.")
+        await messagesender(self.bot, ctx.channel.id, content=f"Cleared queues for {cleared_count} servers.")
 
     @commands.command(name="sendglobalmsg")
     async def send_global_message(self, ctx, *, message: str):
+        """Send message to all servers (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         success_count = 0
@@ -439,15 +464,16 @@ class Admin(commands.Cog):
             else:
                 failure_count += 1
         
-        await self.messagesender(ctx.channel.id, content=f"Message sent to {success_count} servers. Failed in {failure_count}.")
+        await messagesender(self.bot, ctx.channel.id, content=f"Message sent to {success_count} servers. Failed in {failure_count}.")
 
     @commands.command(name="updateyt")
     async def update_yt_dlp(self, ctx):
+        """Update yt-dlp (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
 
-        await self.messagesender(ctx.channel.id, content="?? Updating pip and yt-dlp...")
+        await messagesender(self.bot, ctx.channel.id, content="?? Updating pip and yt-dlp...")
         try:
             pip_proc = await asyncio.create_subprocess_exec(
                 "python3", "-m", "pip", "install", "--upgrade", "pip",
@@ -465,22 +491,23 @@ class Admin(commands.Cog):
 
             if yt_proc.returncode == 0:
                 output = stdout.decode().strip()
-                await self.messagesender(ctx.channel.id, content=f"? yt-dlp updated:\n```\n{output}\n```")
+                await messagesender(self.bot, ctx.channel.id, content=f"? yt-dlp updated:\n```\n{output}\n```")
             else:
                 error = stderr.decode().strip()
-                await self.messagesender(ctx.channel.id, content=f"? Update failed:\n```\n{error}\n```")
+                await messagesender(self.bot, ctx.channel.id, content=f"? Update failed:\n```\n{error}\n```")
 
         except Exception as e:
-            await self.messagesender(ctx.channel.id, content=f"? Error: {str(e)}")
+            await messagesender(self.bot, ctx.channel.id, content=f"? Error: {str(e)}")
 
     @commands.command(name="fetchlogs", aliases=["logs"])
     async def fetchlogs(self, ctx):
+        """Fetch and send bot logs (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
 
         if not os.path.exists(self.LOG_FILE):
-            await self.messagesender(ctx.channel.id, content="File not found.")
+            await messagesender(self.bot, ctx.channel.id, content="File not found.")
             return
 
         file_size = os.path.getsize(self.LOG_FILE)
@@ -506,7 +533,7 @@ class Admin(commands.Cog):
             with open(self.LOG_FILE, 'rb') as file:
                 await ctx.author.typing()
                 await ctx.author.send(file=discord.File(file, filename=os.path.basename(self.LOG_FILE)))
-                await self.messagesender(ctx.channel.id, content="Sent debug logs via DM.")
+                await messagesender(self.bot, ctx.channel.id, content="Sent debug logs via DM.")
 
 async def setup(bot):
     await bot.add_cog(Admin(bot))

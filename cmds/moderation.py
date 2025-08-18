@@ -3,6 +3,7 @@ from discord.ext import commands
 import discord
 import os
 import json
+from utils.common import messagesender
 
 class Moderation(commands.Cog):
     def __init__(self, bot):
@@ -61,94 +62,107 @@ class Moderation(commands.Cog):
         # Check both hardcoded and stored blacklist
         return any(keyword in title for keyword in banned_keywords) or title in blacklist_data["blacklist"]
 
-    async def messagesender(self, channel_id, content=None, embed=None):
-        """Send messages to Discord channels"""
-        channel = self.bot.get_channel(channel_id)
-        if not channel:
-            return
-        
-        try:
-            if content and embed:
-                await channel.send(content=content, embed=embed)
-            elif content:
-                await channel.send(content)
-            elif embed:
-                await channel.send(embed=embed)
-        except Exception as e:
-            print(f"Error sending message: {e}")
-
     @commands.command(name="banuser")
     async def banuser(self, ctx, user: discord.User):
+        """Ban a user from using the bot (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         banned_users = self.load_banned_users()
         banned_users[user.id] = user.name
         self.save_banned_users(banned_users)
-        await self.messagesender(ctx.channel.id, content=f"{user.name} has been banned from using the bot.")
+        
+        # Update bot's banned users
+        bot_banned_users = getattr(self.bot, 'banned_users', {})
+        bot_banned_users[user.id] = user.name
+        
+        await messagesender(self.bot, ctx.channel.id, content=f"{user.name} has been banned from using the bot.")
 
     @commands.command(name="unbanuser")
     async def unbanuser(self, ctx, user: discord.User):
+        """Unban a user from using the bot (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         banned_users = self.load_banned_users()
         if user.id in banned_users:
             del banned_users[user.id]
             self.save_banned_users(banned_users)
-            await self.messagesender(ctx.channel.id, content=f"{user.name} has been unbanned from using the bot.")
+            
+            # Update bot's banned users
+            bot_banned_users = getattr(self.bot, 'banned_users', {})
+            if user.id in bot_banned_users:
+                del bot_banned_users[user.id]
+            
+            await messagesender(self.bot, ctx.channel.id, content=f"{user.name} has been unbanned from using the bot.")
         else:
-            await self.messagesender(ctx.channel.id, content=f"{user.name} is not banned.")
+            await messagesender(self.bot, ctx.channel.id, content=f"{user.name} is not banned.")
 
     @commands.command(name="bannedlist")
     async def bannedlist(self, ctx):
+        """Show list of banned users (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         banned_users = self.load_banned_users()
         if not banned_users:
-            await self.messagesender(ctx.channel.id, content="No users are currently banned.")
+            await messagesender(self.bot, ctx.channel.id, content="No users are currently banned.")
         else:
             banned_list = "\n".join([f"{uid}: {name}" for uid, name in banned_users.items()])
-            await self.messagesender(ctx.channel.id, content=f"Banned Users:\n{banned_list}")
+            await messagesender(self.bot, ctx.channel.id, content=f"Banned Users:\n{banned_list}")
 
     @commands.command(name="blacklist")
     async def blacklist(self, ctx, *, song: str):
+        """Add a song to the blacklist (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         blacklist_data = self.load_blacklist()
         if song.lower() not in blacklist_data["blacklist"]:
             blacklist_data["blacklist"].append(song.lower())
             self.save_blacklist(blacklist_data)
-            await self.messagesender(ctx.channel.id, content=f"`{song}` has been blacklisted.")
+            
+            # Update bot's blacklist data
+            bot_blacklist_data = getattr(self.bot, 'blacklist_data', {"blacklist": [], "whitelist": []})
+            if song.lower() not in bot_blacklist_data["blacklist"]:
+                bot_blacklist_data["blacklist"].append(song.lower())
+            
+            await messagesender(self.bot, ctx.channel.id, content=f"`{song}` has been blacklisted.")
         else:
-            await self.messagesender(ctx.channel.id, content=f"`{song}` is already blacklisted.")
+            await messagesender(self.bot, ctx.channel.id, content=f"`{song}` is already blacklisted.")
 
     @commands.command(name="whitelist")
     async def whitelist(self, ctx, *, song: str):
+        """Remove a song from the blacklist (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         blacklist_data = self.load_blacklist()
         if song.lower() in blacklist_data["blacklist"]:
             blacklist_data["blacklist"].remove(song.lower())
             self.save_blacklist(blacklist_data)
-            await self.messagesender(ctx.channel.id, content=f"`{song}` has been removed from the blacklist.")
+            
+            # Update bot's blacklist data
+            bot_blacklist_data = getattr(self.bot, 'blacklist_data', {"blacklist": [], "whitelist": []})
+            if song.lower() in bot_blacklist_data["blacklist"]:
+                bot_blacklist_data["blacklist"].remove(song.lower())
+            
+            await messagesender(self.bot, ctx.channel.id, content=f"`{song}` has been removed from the blacklist.")
         else:
-            await self.messagesender(ctx.channel.id, content=f"`{song}` is not in the blacklist.")
+            await messagesender(self.bot, ctx.channel.id, content=f"`{song}` is not in the blacklist.")
 
     @commands.command(name="blacklistcheck")
     async def blacklist_check(self, ctx, *, song: str):
+        """Check if a song is blacklisted"""
         if self.is_banned_title(song):
-            await self.messagesender(ctx.channel.id, content=f"`{song}` is blacklisted.")
+            await messagesender(self.bot, ctx.channel.id, content=f"`{song}` is blacklisted.")
         else:
-            await self.messagesender(ctx.channel.id, content=f"`{song}` is not blacklisted.")
+            await messagesender(self.bot, ctx.channel.id, content=f"`{song}` is not blacklisted.")
 
 async def setup(bot):
     await bot.add_cog(Moderation(bot))

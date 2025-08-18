@@ -3,6 +3,7 @@ from discord.ext import commands
 import discord
 import json
 import os
+from utils.common import messagesender
 
 class Config(commands.Cog):
     def __init__(self, bot):
@@ -67,22 +68,6 @@ class Config(commands.Cog):
         with open(self.DEBUG_CONFIG_PATH, "w") as f:
             json.dump(config_data, f, indent=4)
 
-    async def messagesender(self, channel_id, content=None, embed=None):
-        """Send messages to Discord channels"""
-        channel = self.bot.get_channel(channel_id)
-        if not channel:
-            return
-        
-        try:
-            if content and embed:
-                await channel.send(content=content, embed=embed)
-            elif content:
-                await channel.send(content)
-            elif embed:
-                await channel.send(embed=embed)
-        except Exception as e:
-            print(f"Error sending message: {e}")
-
     async def update_bot_presence(self):
         """Update the bot's presence based on the stats setting"""
         stats_config = self.load_stats_config()
@@ -94,66 +79,81 @@ class Config(commands.Cog):
 
     @commands.command(name="setprefix", aliases=["prefix"])
     async def setprefix_cmd(self, ctx, prefix: str):
+        """Set bot prefix for this server"""
         if not self.is_owner_or_server_owner(ctx):
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         self.update_server_config(ctx.guild.id, "prefix", prefix)
-        await self.messagesender(ctx.channel.id, f"Prefix updated to: `{prefix}`")
+        await messagesender(self.bot, ctx.channel.id, f"Prefix updated to: `{prefix}`")
 
     @commands.command(name="setdjrole", aliases=["setrole"])
     async def setdjrole_cmd(self, ctx, role: discord.Role):
+        """Set DJ role for this server"""
         if not self.is_owner_or_server_owner(ctx):
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         self.update_server_config(ctx.guild.id, "dj_role", role.id)
-        await self.messagesender(ctx.channel.id, f"DJ role updated to: `{role.name}`")
+        await messagesender(self.bot, ctx.channel.id, f"DJ role updated to: `{role.name}`")
 
     @commands.command(name="setchannel")
     async def setchannel_cmd(self, ctx, channel: discord.TextChannel):
+        """Set designated music channel for this server"""
         if not self.is_owner_or_server_owner(ctx):
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         self.update_server_config(ctx.guild.id, "channel", channel.id)
-        await self.messagesender(ctx.channel.id, f"Designated channel updated to: `{channel.name}`")
+        await messagesender(self.bot, ctx.channel.id, f"Designated channel updated to: `{channel.name}`")
 
     @commands.command(name="debugmode")
     async def toggle_debug(self, ctx):
+        """Toggle debug mode (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         debug_config = self.load_debug_mode()
         debug_config["debug"] = not debug_config["debug"]
         self.save_debug_mode(debug_config)
+        
+        # Update bot's debug config
+        bot_debug_config = getattr(self.bot, 'debug_config', {"debug": False})
+        bot_debug_config["debug"] = debug_config["debug"]
+        
         state = "enabled" if debug_config["debug"] else "disabled"
-        await self.messagesender(ctx.channel.id, content=f"Debug mode has been {state}.")
+        await messagesender(self.bot, ctx.channel.id, content=f"Debug mode has been {state}.")
 
     @commands.command(name="showstats")
     async def toggle_stats(self, ctx):
+        """Toggle stats display in bot presence (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
         
         stats_config = self.load_stats_config()
         stats_config["show_stats"] = not stats_config["show_stats"]
         self.save_stats_config(stats_config)
         
+        # Update bot's stats config
+        bot_stats_config = getattr(self.bot, 'stats_config', {"show_stats": True})
+        bot_stats_config["show_stats"] = stats_config["show_stats"]
+        
         await self.update_bot_presence()
         
         state = "enabled" if stats_config["show_stats"] else "disabled"
-        await self.messagesender(ctx.channel.id, content=f"Bot stats display has been {state}.")
+        await messagesender(self.bot, ctx.channel.id, content=f"Bot stats display has been {state}.")
 
     @commands.command(name="setnick", aliases=["nickname"])
     async def setnick_cmd(self, ctx, *, nickname: str = None):
+        """Set bot nickname in this server (Owner only)"""
         if ctx.author.id != self.BOT_OWNER_ID:
-            await self.messagesender(ctx.channel.id, content="You don't have permission to use this command.")
+            await messagesender(self.bot, ctx.channel.id, content="You don't have permission to use this command.")
             return
 
         try:
             await ctx.guild.me.edit(nick=nickname)
-            await self.messagesender(ctx.channel.id, content=f"Bot nickname changed to `{nickname}`")
+            await messagesender(self.bot, ctx.channel.id, content=f"Bot nickname changed to `{nickname}`")
         except Exception as e:
-            await self.messagesender(ctx.channel.id, content=f"Failed to change nickname: {e}")
+            await messagesender(self.bot, ctx.channel.id, content=f"Failed to change nickname: {e}")
 
 async def setup(bot):
     await bot.add_cog(Config(bot))

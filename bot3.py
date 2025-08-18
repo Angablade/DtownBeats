@@ -20,6 +20,7 @@ import ffmpeg
 
 from utils.voice_utils import start_listening, stop_listening
 from utils.youtube_pl import grab_youtube_pl
+from utils.lyrics import Lyrics
 from utils.albumart import AlbumArtFetcher
 from utils.metadata import MetadataManager
 from utils.common import load_config_from_file_or_env, messagesender, get_server_config, safe_voice_connect
@@ -86,7 +87,7 @@ def is_owner_or_server_owner(ctx):
         return True
     if ctx.author.id == ctx.guild.owner_id:
         return True
-        
+		
     return False
 
 if not os.path.exists(CONFIG_FILE):
@@ -201,40 +202,6 @@ def save_debug_mode(config_data):
     with open(DEBUG_CONFIG_PATH, "w") as f:
         json.dump(config_data, f, indent=4)
 
-from cmds.music import Music
-from cmds.config import Config
-from cmds.admin import Admin
-from cmds.moderation import Moderation
-from cmds.info import Info
-from cmds.voice import Voice
-from cmds.lyrics import LyricsCog
-from cmds.metadata import Metadata
-from cmds.events import Events
-from cmds.queue import Queue
-
-# Load all cogs and initialize the bot
-def load_cogs():
-    """Load all cog files"""
-    cogs = [
-             Music(bot),
-            Config(bot),
-             Admin(bot),
-        Moderation(bot),
-              Info(bot),
-             Voice(bot),
-            LyricsCog(bot),
-          Metadata(bot),
-            Events(bot),
-             Queue(bot)
-    ]
-    
-    for cog in cogs:
-        try:
-            bot.add_cog(cog)
-            logging.info(f"Loaded cog: {cog}")
-        except Exception as e:
-            logging.error(f"Failed to load cog {cog}: {e}")
-
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
@@ -245,7 +212,6 @@ intents.guild_messages = True
 start_time = time.time()
 fetcher = AlbumArtFetcher()
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
-load_cogs()
 os.makedirs('static', exist_ok=True)
 
 # Attach shared state to bot instance for cogs to access
@@ -299,7 +265,7 @@ async def on_message(message):
         last_active_channels[message.guild.id] = message.channel.id
     await bot.process_commands(message)
 
-# All the helper functions remain unchanged but commands have been moved to cogs
+# Helper functions
 async def download_audio(video_id):
     try:
         if asyncio.iscoroutinefunction(get_audio_filename):
@@ -559,7 +525,6 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
 
-
 def update_now_playing(guild_id, track_id, title, album_art_url):
     now_playing[guild_id] = (track_id, title, album_art_url)
 
@@ -656,23 +621,12 @@ async def get_youtube_playlist_title(playlist_id):
             logging.error(f"Error fetching playlist title: {e}")
             return "Unknown Playlist"
 
-async def inactivity_timeout_handler(ctx):
-    """Handles inactivity timeout - disconnect after 30 seconds of inactivity"""
-    await asyncio.sleep(30) 
+async def timeout_handler(ctx):
+    await asyncio.sleep(TIMEOUT_TIME) 
 
-    guild_id = ctx.guild.id
-    if ctx.voice_client and ctx.voice_client.is_connected():
-        # Check if autoplay is enabled and skip timeout
-        if autoplay_enabled.get(guild_id, False):
-            logging.info(f"Autoplay enabled in {ctx.guild.name}, skipping timeout")
-            return
-            
-        # Check if channel has other members
-        if len(ctx.voice_client.channel.members) <= 1:
-            logging.info(f"Disconnecting from {ctx.guild.name} due to inactivity")
-            await ctx.voice_client.disconnect()
-        else:
-            logging.info(f"Other members present in {ctx.guild.name}, not disconnecting")
+    if ctx.guild.id in bot.voice_clients and ctx.voice_client and ctx.voice_client.is_connected():
+        await ctx.voice_client.disconnect()
+        logging.info(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
 
 async def update_bot_presence():
     """ Updates the bot's presence based on the stats setting. """
@@ -729,7 +683,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
                 await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
                 return
 
-        if not ctx.voice_manager.is_playing():
+        if not ctx.voice_client.is_playing():
             asyncio.create_task(play_next(ctx, ctx.voice_client))
 
     except Exception as e:
@@ -743,8 +697,8 @@ def add_track_to_history(guild_id, video_id, video_title):
         track_history[guild_id].pop(0) 
 
 async def check_empty_channel(ctx):
-    """Check if voice channel is empty after 30 seconds"""
-    await asyncio.sleep(30)
+    """Check if voice channel is empty after 60 seconds"""
+    await asyncio.sleep(60)
     guild_id = ctx.guild.id
     
     if ctx.voice_client and ctx.voice_client.is_connected():
@@ -798,7 +752,8 @@ async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
         if i % max(1, total_videos // update_interval) == 0 or i == total_videos:
             await update_progress("Extracting", progress)
 
-    await progress_message.edit(content=f"✅ Playlist processing complete! Found {total_videos} ID`s.")
+    await progress_message.edit(content=f"✅ Playlist processing complete! Found {total_videos} IDs.")
+    return video_ids
 
 async def play_next(ctx, voice_client):
     """Improved play_next with better error handling and simplified logic"""
@@ -968,7 +923,7 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     if guild_id in bot.timeout_tasks:
         bot.timeout_tasks[guild_id].cancel()
 
-    bot.timeout_tasks[guild_id] = asyncio.create_task(inactivity_timeout_handler(ctx))
+    bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(ctx))
 
     # Pre-download next tracks
     if not server_queues[guild_id].empty():
@@ -991,26 +946,53 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     if voice_client and voice_client.is_connected() and not bot.intentional_disconnections.get(guild_id, False):
         await play_next(ctx, voice_client)
 
-async def safe_voice_connect(bot, guild, channel):
-    # Enforce cooldown
-    now = asyncio.get_event_loop().time()
-    cooldown = bot.reconnect_cooldowns.get(guild.id, 0)
-    if now < cooldown:
-        logging.info(f"Cooldown active for guild {guild.id}")
-        return None
+# Load all cogs
+async def load_cogs():
+    """Load all cog files"""
+    cogs = [
+        'cmds.music',
+        'cmds.queue', 
+        'cmds.voice',
+        'cmds.config',
+        'cmds.admin',
+        'cmds.moderation',
+        'cmds.info',
+        'cmds.lyrics',
+        'cmds.metadata',
+        'cmds.events'
+    ]
+    
+    for cog in cogs:
+        try:
+            await bot.load_extension(cog)
+            logging.info(f"Loaded cog: {cog}")
+        except Exception as e:
+            logging.error(f"Failed to load cog {cog}: {e}")
 
-    bot.reconnect_cooldowns[guild.id] = now + 30  # 30s cooldown
+# Expose functions for cogs
+bot.download_audio = download_audio
+bot.retry_download = retry_download
+bot.get_related_video = get_related_video
+bot.is_banned_title = is_banned_title
+bot.run_blocking_in_executor = run_blocking_in_executor
+bot.get_youtube_video_title = get_youtube_video_title
+bot.get_youtube_playlist_title = get_youtube_playlist_title
+bot.timeout_handler = timeout_handler
+bot.update_bot_presence = update_bot_presence
+bot.get_current_elapsed_time = get_current_elapsed_time
+bot.retrieve_audio_file_for_current_track = retrieve_audio_file_for_current_track
+bot.queue_and_play_next = queue_and_play_next
+bot.add_track_to_history = add_track_to_history
+bot.check_empty_channel = check_empty_channel
+bot.fetch_playlist_videos = fetch_playlist_videos
+bot.play_next = play_next
+bot.play_audio_in_thread = play_audio_in_thread
 
-    # Always disconnect first
-    if guild.voice_client:
-        await guild.voice_client.disconnect(force=True)
+async def main():
+    async with bot:
+        await load_cogs()
+        await bot.start(BOT_TOKEN)
 
-    try:
-        vc = await channel.connect()
-        return vc
-    except Exception as e:
-        logging.error(f"Voice connect failed: {e}")
-        return None
-
-bot.run(BOT_TOKEN)
+if __name__ == "__main__":
+    asyncio.run(main())
 

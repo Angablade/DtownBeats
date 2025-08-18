@@ -16,27 +16,8 @@ class Info(commands.Cog):
 
     async def messagesender(self, channel_id, content=None, embed=None, file=None):
         """Send messages to Discord channels"""
-        channel = self.bot.get_channel(channel_id)
-        if not channel:
-            return
-        
-        try:
-            if content and embed and file:
-                await channel.send(content=content, embed=embed, file=file)
-            elif content and embed:
-                await channel.send(content=content, embed=embed)
-            elif content and file:
-                await channel.send(content=content, file=file)
-            elif embed and file:
-                await channel.send(embed=embed, file=file)
-            elif content:
-                await channel.send(content)
-            elif embed:
-                await channel.send(embed=embed)
-            elif file:
-                await channel.send(file=file)
-        except Exception as e:
-            print(f"Error sending message: {e}")
+        from utils.common import messagesender
+        await messagesender(self.bot, channel_id, content, embed, file=file)
 
     @commands.command(name="stats")
     async def stats(self, ctx):
