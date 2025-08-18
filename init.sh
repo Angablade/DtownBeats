@@ -59,7 +59,7 @@ fi
 
 # Update and install dependencies (only in Docker)
 if is_docker; then
-    apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full apt-utils libopus-dev psutil
+    apt-get update && apt-get upgrade -y && apt-get install -y wget python3-pip ffmpeg p7zip-full apt-utils libopus-dev psutils
     
     # Upgrade pip
     pip install --upgrade pip
