@@ -90,7 +90,7 @@ REPO_URLS=(
 # Updated FILES array to include all cog files
 FILES=(
     "bot3.py" 
-    "utils/youtube_pl.py" "utils/voice_utils.py" "utils/albumart.py" "utils/metadata.py" "utils/web_app.py" "utils/common.py"
+    "utils/youtube_pl.py" "utils/voice_utils.py" "utils/albumart.py" "utils/metadata.py" "utils/web_app.py" "utils/common.py" "utils/lyrics.py"
     "sources/youtube_mp3.py" "sources/spotify_mp3.py" "sources/soundcloud_mp3.py" "sources/bandcamp_mp3.py" "sources/apple_music_mp3.py"
     "cmds/admin.py" "cmds/config.py" "cmds/events.py" "cmds/info.py" "cmds/lyrics.py" "cmds/metadata.py" "cmds/moderation.py" "cmds/music.py" "cmds/queue.py" "cmds/voice.py"
 )
