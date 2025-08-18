@@ -176,35 +176,5 @@ class Info(commands.Cog):
         invite_url = f"https://discord.com/oauth2/authorize?client_id={bot_id}&permissions={permissions}&scope={scopes}"
         await ctx.author.send(f"<:afoyawn:1330375212302336030> Invite me to your server using this link: {invite_url}")
 
-    @commands.command(name="fetchlogs", aliases=["logs"])
-    async def fetchlogs_cmd(self, ctx):
-        if not os.path.exists(self.LOG_FILE):
-            await ctx.send("File not found.")
-            return
-        file_size = os.path.getsize(self.LOG_FILE)
-        if file_size > 8 * 1024 * 1024:
-            zip_path = self.LOG_FILE + ".zip"
-            shutil.make_archive(self.LOG_FILE, 'zip', root_dir=os.path.dirname(self.LOG_FILE), base_dir=os.path.basename(self.LOG_FILE))
-            zip_size = os.path.getsize(zip_path)
-            if zip_size > 8 * 1024 * 1024:
-                split_path = self.LOG_FILE + ".7z"
-                split_command = f'7z a -t7z -v7m "{split_path}" "{self.LOG_FILE}"'
-                subprocess.run(split_command, shell=True)
-                split_parts = [f for f in os.listdir(os.path.dirname(self.LOG_FILE)) if f.startswith(os.path.basename(split_path))]
-                for part in sorted(split_parts):
-                    part_path = os.path.join(os.path.dirname(self.LOG_FILE), part)
-                    await ctx.author.send(file=discord.File(part_path))
-                    os.remove(part_path)
-            else:
-                with open(zip_path, 'rb') as file:
-                    await ctx.author.typing()
-                    await ctx.author.send(file=discord.File(file, filename=os.path.basename(zip_path)))
-                os.remove(zip_path)
-        else:
-            with open(self.LOG_FILE, 'rb') as file:
-                await ctx.author.typing()
-                await ctx.author.send(file=discord.File(file, filename=os.path.basename(self.LOG_FILE)))
-                await ctx.send("Sent debug logs via DM.")
-
 async def setup(bot):
     await bot.add_cog(Info(bot))
