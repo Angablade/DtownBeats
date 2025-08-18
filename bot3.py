@@ -201,24 +201,36 @@ def save_debug_mode(config_data):
     with open(DEBUG_CONFIG_PATH, "w") as f:
         json.dump(config_data, f, indent=4)
 
+from cmds.music import Music
+from cmds.config import Config
+from cmds.admin import Admin
+from cmds.moderation import Moderation
+from cmds.info import Info
+from cmds.voice import Voice
+from cmds.lyrics import LyricsCog
+from cmds.metadata import Metadata
+from cmds.events import Events
+from cmds.queue import Queue
+
+# Load all cogs and initialize the bot
 def load_cogs():
     """Load all cog files"""
     cogs = [
-             'music',
-            'config',
-             'admin',
-        'moderation',
-              'info',
-             'voice',
-            'lyrics',
-          'metadata',
-            'events',
-             'queue'
+             Music(bot),
+            Config(bot),
+             Admin(bot),
+        Moderation(bot),
+              Info(bot),
+             Voice(bot),
+            LyricsCog(bot),
+          Metadata(bot),
+            Events(bot),
+             Queue(bot)
     ]
     
     for cog in cogs:
         try:
-            bot.load_extension(f"cmds.{cog(bot)}")
+            bot.add_cog(cog)
             logging.info(f"Loaded cog: {cog}")
         except Exception as e:
             logging.error(f"Failed to load cog {cog}: {e}")
