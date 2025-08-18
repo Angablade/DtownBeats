@@ -210,6 +210,7 @@ intents.guild_messages = True
 
 start_time = time.time()
 fetcher = AlbumArtFetcher()
+load_cogs()
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 os.makedirs('static', exist_ok=True)
 
@@ -257,6 +258,28 @@ stats_config = bot.stats_config
 blacklist_data = bot.blacklist_data
 debug_config = bot.debug_config
 metadata_manager = bot.metadata_manager
+
+def load_cogs():
+    """Load all cog files"""
+    cogs = [
+        'music',
+        'config', 
+        'admin',
+        'moderation',
+        'info',
+        'voice',
+        'lyrics',
+        'metadata',
+        'events',
+        'queue'
+    ]
+    
+    for cog in cogs:
+        try:
+            bot.load_extension(cog)
+            logging.info(f"Loaded cog: {cog}")
+        except Exception as e:
+            logging.error(f"Failed to load cog {cog}: {e}")
 
 @bot.event
 async def on_message(message):
@@ -956,28 +979,5 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     if voice_client and voice_client.is_connected() and not bot.intentional_disconnections.get(guild_id, False):
         await play_next(ctx, voice_client)
 
-def load_cogs():
-    """Load all cog files"""
-    cogs = [
-        'cmds.music',
-        'cmds.config', 
-        'cmds.admin',
-        'cmds.moderation',
-        'cmds.info',
-        'cmds.voice',
-        'cmds.lyrics',
-        'cmds.metadata',
-        'cmds.events',
-        'cmds.queue'
-    ]
-    
-    for cog in cogs:
-        try:
-            bot.load_extension(cog)
-            logging.info(f"Loaded cog: {cog}")
-        except Exception as e:
-            logging.error(f"Failed to load cog {cog}: {e}")
-
-load_cogs()
 bot.run(BOT_TOKEN)
 
