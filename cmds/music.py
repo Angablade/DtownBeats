@@ -99,7 +99,7 @@ class Music(commands.Cog):
         else:
             await self.messagesender(ctx.channel.id, content="You need to be in a voice channel for me to join!")
 
-    @self.bot.command(name="play")
+    @bot.command(name="play")
     async def play(self, ctx, *, srch: str):
         """Play music from various sources"""
         async with ctx.typing():
@@ -115,7 +115,7 @@ class Music(commands.Cog):
             await self.handle_voice_connection(ctx)
             await self.messagesender(ctx.channel.id, f"Processing: {srch}")
 
-    @self.bot.command(name="pause", aliases=["hold"])
+    @bot.command(name="pause", aliases=["hold"])
     async def pause(self, ctx):
         """Pause the current track"""
         async with ctx.typing():
