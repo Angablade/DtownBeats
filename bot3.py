@@ -201,6 +201,28 @@ def save_debug_mode(config_data):
     with open(DEBUG_CONFIG_PATH, "w") as f:
         json.dump(config_data, f, indent=4)
 
+def load_cogs():
+    """Load all cog files"""
+    cogs = [
+        'music',
+        'config', 
+        'admin',
+        'moderation',
+        'info',
+        'voice',
+        'lyrics',
+        'metadata',
+        'events',
+        'queue'
+    ]
+    
+    for cog in cogs:
+        try:
+            bot.load_extension(f"cmds.{cog}")
+            logging.info(f"Loaded cog: {cog}")
+        except Exception as e:
+            logging.error(f"Failed to load cog {cog}: {e}")
+
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
@@ -258,28 +280,6 @@ stats_config = bot.stats_config
 blacklist_data = bot.blacklist_data
 debug_config = bot.debug_config
 metadata_manager = bot.metadata_manager
-
-def load_cogs():
-    """Load all cog files"""
-    cogs = [
-        'music',
-        'config', 
-        'admin',
-        'moderation',
-        'info',
-        'voice',
-        'lyrics',
-        'metadata',
-        'events',
-        'queue'
-    ]
-    
-    for cog in cogs:
-        try:
-            bot.load_extension(cog)
-            logging.info(f"Loaded cog: {cog}")
-        except Exception as e:
-            logging.error(f"Failed to load cog {cog}: {e}")
 
 @bot.event
 async def on_message(message):
