@@ -524,27 +524,6 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
 
-async def load_cogs():
-    """Load all cog files"""
-    cogs = [
-        'cmds.music',
-        'cmds.config', 
-        'cmds.admin',
-        'cmds.moderation',
-        'cmds.info',
-        'cmds.voice',
-        'cmds.lyrics',
-        'cmds.metadata',
-        'cmds.events',
-        'cmds.queue'
-    ]
-    
-    for cog in cogs:
-        try:
-            bot.load_extension(cog)
-            logging.info(f"Loaded cog: {cog}")
-        except Exception as e:
-            logging.error(f"Failed to load cog {cog}: {e}")
 
 def update_now_playing(guild_id, track_id, title, album_art_url):
     now_playing[guild_id] = (track_id, title, album_art_url)
@@ -976,6 +955,29 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     # Auto-play next track
     if voice_client and voice_client.is_connected() and not bot.intentional_disconnections.get(guild_id, False):
         await play_next(ctx, voice_client)
+
+def load_cogs():
+    """Load all cog files"""
+    cogs = [
+        'cmds.music',
+        'cmds.config', 
+        'cmds.admin',
+        'cmds.moderation',
+        'cmds.info',
+        'cmds.voice',
+        'cmds.lyrics',
+        'cmds.metadata',
+        'cmds.events',
+        'cmds.queue'
+    ]
+    
+    for cog in cogs:
+        try:
+            bot.load_extension(cog)
+            logging.info(f"Loaded cog: {cog}")
+        except Exception as e:
+            logging.error(f"Failed to load cog {cog}: {e}")
+
 load_cogs()
 bot.run(BOT_TOKEN)
 
