@@ -968,7 +968,7 @@ async def load_cogs():
         Admin(bot),
         Moderation(bot),
         Info(bot),
-        Lyrics(bot),
+        LyricsCog(bot),
         Metadata(bot),
         Events(bot)
     ]
