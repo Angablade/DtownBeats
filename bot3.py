@@ -204,16 +204,16 @@ def save_debug_mode(config_data):
 def load_cogs():
     """Load all cog files"""
     cogs = [
-             'music.Music',
-            'config.Config', 
-             'admin.Admin',
-        'moderation.Moderation',
-              'info.Info',
-             'voice.Voice',
-            'lyrics.Lyrics',
-          'metadata.Metadata',
-            'events.Events',
-             'queue.Queue'
+             'music',
+            'config',
+             'admin',
+        'moderation',
+              'info',
+             'voice',
+            'lyrics',
+          'metadata',
+            'events',
+             'queue'
     ]
     
     for cog in cogs:
