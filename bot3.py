@@ -729,7 +729,7 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
                 await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
                 return
 
-        if not ctx.voice_client.is_playing():
+        if not ctx.voice_manager.is_playing():
             asyncio.create_task(play_next(ctx, ctx.voice_client))
 
     except Exception as e:
@@ -990,6 +990,27 @@ async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video
     # Auto-play next track
     if voice_client and voice_client.is_connected() and not bot.intentional_disconnections.get(guild_id, False):
         await play_next(ctx, voice_client)
+
+async def safe_voice_connect(bot, guild, channel):
+    # Enforce cooldown
+    now = asyncio.get_event_loop().time()
+    cooldown = bot.reconnect_cooldowns.get(guild.id, 0)
+    if now < cooldown:
+        logging.info(f"Cooldown active for guild {guild.id}")
+        return None
+
+    bot.reconnect_cooldowns[guild.id] = now + 30  # 30s cooldown
+
+    # Always disconnect first
+    if guild.voice_client:
+        await guild.voice_client.disconnect(force=True)
+
+    try:
+        vc = await channel.connect()
+        return vc
+    except Exception as e:
+        logging.error(f"Voice connect failed: {e}")
+        return None
 
 bot.run(BOT_TOKEN)
 
