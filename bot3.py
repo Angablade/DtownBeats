@@ -544,7 +544,7 @@ async def load_cogs():
     
     for cog in cogs:
         try:
-            bot.load_extension(cog)
+            await bot.load_extension(cog)
             logging.info(f"Loaded cog: {cog}")
         except Exception as e:
             logging.error(f"Failed to load cog {cog}: {e}")
