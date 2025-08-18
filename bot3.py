@@ -232,8 +232,8 @@ intents.guild_messages = True
 
 start_time = time.time()
 fetcher = AlbumArtFetcher()
-load_cogs()
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
+load_cogs()
 os.makedirs('static', exist_ok=True)
 
 # Attach shared state to bot instance for cogs to access
