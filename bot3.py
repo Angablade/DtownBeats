@@ -23,7 +23,7 @@ from utils.youtube_pl import grab_youtube_pl
 from utils.lyrics import Lyrics
 from utils.albumart import AlbumArtFetcher
 from utils.metadata import MetadataManager
-from utils.common import load_config_from_file_or_env, messagesender, get_server_config, safe_voice_connect
+
 
 from sources.youtube_mp3 import get_audio_filename
 from sources.bandcamp_mp3 import get_bandcamp_audio, get_bandcamp_title
@@ -41,30 +41,16 @@ from discord import FFmpegPCMAudio, Embed
 from discord.errors import ClientException
 from fuzzywuzzy import fuzz
 
-from cmds.admin import Admin
-from cmds.config import Config
-from cmds.events import Events
-from cmds.info import Info
-from cmds.lyrics import LyricsCog
-from cmds.metadata import Metadata
-from cmds.moderation import Moderation
-from cmds.music import Music
-from cmds.queue import Queue
-from cmds.voice import Voice
-
-# Load configuration from file or environment
-app_config = load_config_from_file_or_env()
-
 #ENVIRONMENT VARIABLES
-MUSICBRAINZ_USERAGENT = app_config['MUSICBRAINZ_USERAGENT']
-MUSICBRAINZ_VERSION = app_config['MUSICBRAINZ_VERSION']
-MUSICBRAINZ_CONTACT = app_config['MUSICBRAINZ_CONTACT']
-BOT_OWNER_ID = app_config['BOT_OWNER_ID']
-EXECUTOR_MAX_WORKERS = app_config['EXECUTOR_MAX_WORKERS']
-BOT_TOKEN = app_config['BOT_TOKEN']
-QUEUE_PAGE_SIZE = app_config['QUEUE_PAGE_SIZE']
-HISTORY_PAGE_SIZE = app_config['HISTORY_PAGE_SIZE']
-TIMEOUT_TIME = app_config['TIMEOUT_TIME']
+MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
+MUSICBRAINZ_VERSION = os.getenv("MUSICBRAINZ_VERSION", "1.0")
+MUSICBRAINZ_CONTACT = os.getenv("MUSICBRAINZ_CONTACT", "default@example.com")
+BOT_OWNER_ID = int(os.getenv("BOT_OWNER_ID", 123456789))
+EXECUTOR_MAX_WORKERS = int(os.getenv("EXECUTOR_MAX_WORKERS", "10"))
+BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_token")
+QUEUE_PAGE_SIZE = int(os.getenv("QUEUE_PAGE_SIZE","10"))
+HISTORY_PAGE_SIZE = int(os.getenv("HISTORY_PAGE_SIZE","10"))
+TIMEOUT_TIME = int(os.getenv("TIMEOUT_TIME", "60"))
 
 #CONFIGS
 LOG_FILE = "config/debug.log"
@@ -98,12 +84,8 @@ def is_owner_or_server_owner(ctx):
         return True
     if ctx.author.id == ctx.guild.owner_id:
         return True
-		
+        
     return False
-
-if not os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump({}, f)
 
 def load_config():
     with open(CONFIG_FILE, 'r') as f:
@@ -112,6 +94,10 @@ def load_config():
 def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
+
+def get_server_config(guild_id):
+    config = load_config()
+    return config.get(str(guild_id), {"prefix": "!", "dj_role": None, "channel": None, "autoplay": False})
 
 def update_server_config(guild_id, key, value):
     config = load_config()
@@ -225,50 +211,47 @@ fetcher = AlbumArtFetcher()
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 os.makedirs('static', exist_ok=True)
 
-# Attach shared state to bot instance for cogs to access
 bot.intentional_disconnections = {}
 bot.timeout_tasks = {}
-bot.server_queues = {}
-bot.current_tracks = {}
-bot.queue_paused = {}
-bot.track_history = {}
-bot.autoplay_enabled = {}
-bot.message_map = {}
-bot.last_active_channels = {} 
-bot.now_playing = {}
-bot.reconnect_cooldowns = {}
-bot.FAILED_CONNECTS = {}  
-bot.preload_tasks = {}
-bot.start_time = start_time
-bot.executor = executor
+server_queues = {}
+current_tracks = {}
+queue_paused = {}
+track_history = {}
+autoplay_enabled = {}
+message_map = {}
+last_active_channels = {} 
+now_playing = {}
+reconnect_cooldowns = {}
+FAILED_CONNECTS = {}  
+preload_tasks = {}
+reconnect_cooldowns = {}
 
-# Initialize shared data
-server_queues = bot.server_queues
-current_tracks = bot.current_tracks
-queue_paused = bot.queue_paused
-track_history = bot.track_history
-autoplay_enabled = bot.autoplay_enabled
-message_map = bot.message_map
-last_active_channels = bot.last_active_channels
-now_playing = bot.now_playing
-reconnect_cooldowns = bot.reconnect_cooldowns
-FAILED_CONNECTS = bot.FAILED_CONNECTS
-preload_tasks = bot.preload_tasks
+guild_volumes = load_volume_settings()
+banned_users = load_banned_users()
+stats_config = load_stats_config()
+blacklist_data = load_blacklist()
+debug_config = load_debug_mode()
+metadata_manager = MetadataManager("./metacache","./config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
 
-bot.guild_volumes = load_volume_settings()
-bot.banned_users = load_banned_users()
-bot.stats_config = load_stats_config()
-bot.blacklist_data = load_blacklist()
-bot.debug_config = load_debug_mode()
-bot.metadata_manager = MetadataManager("./metacache","./config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
-bot.fetcher = fetcher
+# ---- Enhancements / New Constants ----
+PRELOAD_LIMIT = 3  # limit number of tracks pre-fetched ahead
 
-guild_volumes = bot.guild_volumes
-banned_users = bot.banned_users
-stats_config = bot.stats_config
-blacklist_data = bot.blacklist_data
-debug_config = bot.debug_config
-metadata_manager = bot.metadata_manager
+def parse_queue_item(item):
+    """
+    Normalizes queue items.
+    Supports legacy list format: [video_id, title]
+    Supports new dict format:   {"video_id":..., "title":..., "file_path": optional}
+    Returns (video_id, title, local_file_path)
+    """
+    if isinstance(item, dict):
+        return item.get("video_id"), item.get("title"), item.get("file_path")
+    if isinstance(item, (list, tuple)) and len(item) >= 2:
+        vid, title = item[0], item[1]
+        # Heuristic: treat as local file if looks like a path
+        if isinstance(vid, str) and ("/" in vid or "\\" in vid) and not re.fullmatch(r"[\w-]{11}", vid):
+            return os.path.splitext(os.path.basename(vid))[0], title, vid
+        return vid, title, None
+    return None, "Unknown", None
 
 @bot.event
 async def on_message(message):
@@ -276,7 +259,6 @@ async def on_message(message):
         last_active_channels[message.guild.id] = message.channel.id
     await bot.process_commands(message)
 
-# Helper functions
 async def download_audio(video_id):
     try:
         if asyncio.iscoroutinefunction(get_audio_filename):
@@ -294,36 +276,74 @@ async def download_audio(video_id):
         logging.error(f"Failed to download audio for {video_id}: {e}")
         raise
 
+
 async def retry_download(video_id, retries=2):
     for attempt in range(retries):
         try:
             return await download_audio(video_id)
         except Exception as e:
-            logging.warning(f"[{video_id}] Retry {attempt+1} failed: {e}")
+            logging.warning(f"[{video_id}] Retry {attempt + 1} failed: {e}")
             await asyncio.sleep(1)
     logging.error(f"[{video_id}] All retries failed.")
     return None
 
+async def check_perms(ctx, guild_id):
+    if ctx.author.id in banned_users:
+        await messagesender(bot, ctx.channel.id, content="You are banned from using this bot.")
+        return False
+
+    config = get_server_config(guild_id)
+    dj_role_id = config.get("dj_role")
+    designated_channel_id = config.get("channel")
+
+    if dj_role_id:
+        dj_role = discord.utils.get(ctx.guild.roles, id=dj_role_id)
+        if dj_role and dj_role not in ctx.author.roles and ctx.author.id != ctx.guild.owner_id:
+            await messagesender(bot, ctx.channel.id, content="You need the DJ role to use music commands.")
+            return False
+
+    if designated_channel_id and ctx.channel.id != designated_channel_id:
+        channel_obj = ctx.guild.get_channel(designated_channel_id)
+        if channel_obj:
+            await messagesender(bot, ctx.channel.id,
+                                content=f"Use music commands in {channel_obj.mention}.")
+        return False
+
+    return True
+
+
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if member == bot.user and after.channel:
-        reconnect_cooldowns[member.guild.id] = 0
+    if member != bot.user:
+        return
 
-    if member == bot.user:
-        guild = before.channel.guild if before.channel else after.channel.guild
-        guild_id = guild.id
+    # Determine guild & guild_id safely (handles move / disconnect)
+    guild = None
+    if before and before.channel:
+        guild = before.channel.guild
+    if not guild and after and after.channel:
+        guild = after.channel.guild
+    if not guild:
+        return
+    guild_id = guild.id
 
-        try:
-            if guild_id in guild_volumes:
-                voice_client = guild.voice_client
-                if voice_client and voice_client.source:
+    # If we have just (re)joined a channel, reset connect cooldown
+    if after and after.channel:
+        reconnect_cooldowns[guild_id] = 0
+
+    try:
+        if guild_id in guild_volumes:
+            voice_client = guild.voice_client
+            if voice_client and voice_client.source:
+                if not isinstance(voice_client.source, discord.PCMVolumeTransformer):
                     voice_client.source = discord.PCMVolumeTransformer(voice_client.source)
-                    voice_client.source.volume = guild_volumes[guild_id] / 100
-        except Exception:
-            logging.exception("Error setting volume after voice state update")
+                voice_client.source.volume = guild_volumes[guild_id] / 100
+    except Exception:
+        logging.exception("Error setting volume after voice state update")
 
-        if guild_id in bot.timeout_tasks:
-            bot.timeout_tasks[guild_id].cancel()
+    if guild_id in bot.timeout_tasks:
+        bot.timeout_tasks[guild_id].cancel()
+
 
 async def handle_resume_on_reconnect(guild, voice_channel):
     await asyncio.sleep(2)
@@ -355,7 +375,7 @@ async def handle_resume_on_reconnect(guild, voice_channel):
             return
 
         video_id, video_title = current_tracks.get(guild_id, {}).get("current_track", (None, "Unknown Title"))
-        logging.info(f"Resuming track '{video_title}' from position {paused_position} seconds for guild {guild_id}.")
+        logging.error(f"Resuming track '{video_title}' from position {paused_position} seconds for guild {guild_id}.")
 
         ctx = await get_ctx_from_guild(guild)
         await play_audio_in_thread(
@@ -367,6 +387,7 @@ async def handle_resume_on_reconnect(guild, voice_channel):
 
     except Exception:
         logging.exception("Failed to resume on reconnect")
+
 
 async def get_ctx_from_guild(guild: discord.Guild):
     """
@@ -434,12 +455,14 @@ async def get_ctx_from_guild(guild: discord.Guild):
     logging.error(f"get_ctx_from_guild: All fallbacks failed for guild {guild.name} ({guild.id})")
     return None
 
+
 @bot.event
 async def on_guild_join(guild):
     if guild.id not in server_queues:
         server_queues[guild.id] = asyncio.Queue()
     await download_guild_icon(guild)
-    logging.info(f"Joined new guild: {guild.name}, initialized queue.")
+    logging.error(f"Joined new guild: {guild.name}, initialized queue.")
+
 
 async def download_guild_icon(guild):
     icon = guild.icon
@@ -456,6 +479,7 @@ async def download_guild_icon(guild):
                     print(f"Failed to download icon for {guild.name}")
     else:
         print(f"{guild.name} does not have an icon.")
+
 
 async def get_related_video(video_id, guild_id, retry_count=3):
     url = f"https://www.youtube.com/watch?v={video_id}"
@@ -483,11 +507,12 @@ async def get_related_video(video_id, guild_id, retry_count=3):
                     if video_title and not is_duplicate(related_id, video_title):
                         return related_id
 
-                logging.info(f"Retry {attempt + 1}/{retry_count}: No new videos found. Reloading page...")
+                logging.error(f"Retry {attempt + 1}/{retry_count}: No new videos found. Reloading page...")
                 await asyncio.sleep(2)
 
-    logging.warning("Failed to find a new related video after 3 attempts. Stopping playback.")
+    logging.error("Failed to find a new related video after 3 attempts. Stopping playback.")
     return None
+
 
 def is_banned_title(title):
     banned_keywords = [
@@ -500,22 +525,344 @@ def is_banned_title(title):
         "take care (feat rihanna)",
         "controlla",
         "laugh now cry later",
-        "hold on, we're going home",
+        "hold on, we’re going home",
         "hotline bling",
         "Dark Lane Demo Tapes",
         "For All the Dogs",
         "Some Sexy Songs 4 U",
         "Certified Lover Boy"
     ]
-    
+
     title = title.lower().strip()
-    
+
     # Check both hardcoded and stored blacklist
     return any(keyword in title for keyword in banned_keywords) or title in blacklist_data["blacklist"]
+
+
+async def messagesender(bot, channel_id, content=None, embed=None, command_message=None, file=None):
+    channel = bot.get_channel(channel_id)
+    if not channel:
+        logging.error(f"[Error] Channel with ID {channel_id} not found.")
+        return
+
+    messages = []
+
+    # Ensure file is a discord.File instance if provided
+    if file and isinstance(file, str):
+        try:
+            file = discord.File(file)
+        except Exception as e:
+            logging.error(f"[Error] Failed to create discord.File: {e}")
+            return
+
+    async with channel.typing():
+        try:
+            # All possible combinations of content, embed, and file
+            if content and embed and file:
+                messages.append(await channel.send(content=content, embed=embed, file=file))
+            elif content and embed:
+                messages.append(await channel.send(content=content, embed=embed))
+            elif content and file:
+                messages.append(await channel.send(content=content, file=file))
+            elif embed and file:
+                messages.append(await channel.send(embed=embed, file=file))
+            elif content:
+                # Ensure content is a string before attempting to split
+                if not isinstance(content, str):
+                    logging.error("[Error] Content must be a string.")
+                    return
+
+                while content:
+                    if len(content) <= 2000:
+                        chunk = content
+                        content = ""
+                    else:
+                        split_index = content.rfind(" ", 0, 2000)
+                        if split_index == -1:
+                            chunk = content[:2000]
+                            content = content[2000:]
+                        else:
+                            chunk = content[:split_index]
+                            content = content[split_index + 1:]
+                    messages.append(await channel.send(chunk))
+            elif embed:
+                messages.append(await channel.send(embed=embed))
+            elif file:
+                messages.append(await channel.send(file=file))
+            else:
+                logging.error("[Error] Either 'content', 'embed', or 'file' must be provided.")
+                return
+        except discord.HTTPException as e:
+            logging.error(f"[Error] Failed to send message: {e}")
+            return
+
+    if command_message:
+        message_map[command_message.guild.id] = messages
+    elif messages:
+        message_map[messages[0].guild.id] = messages
+
 
 async def run_blocking_in_executor(func, *args):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(executor, lambda: func(*args))
+
+
+def add_track_to_history(guild_id, video_id, video_title):
+    if guild_id not in track_history:
+        track_history[guild_id] = []
+    track_history[guild_id].append((video_id, video_title))
+    if len(track_history[guild_id]) > 20:
+        track_history[guild_id].pop(0)
+
+
+async def check_empty_channel(ctx):
+    await asyncio.sleep(60)
+    if ctx.voice_client and len(ctx.voice_client.channel.members) == 1:
+        guild_id = ctx.guild.id
+        if bot.intentional_disconnections.get(guild_id, False):
+            return
+        await ctx.voice_client.disconnect()
+
+
+async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
+    startermessage = f"Fetching playlist: ({playlist_id})\n"
+    progress_message = await ctx.send(startermessage)
+    bar_length = 20
+    update_interval = 10
+
+    async def update_progress(phase: str, progress: float):
+        filled_length = int(bar_length * progress)
+        bar = "█" * filled_length + "░" * (bar_length - filled_length)
+        await progress_message.edit(content=f"{startermessage}{phase}: [{bar}] {progress * 100:.1f}%")
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(playlist_url) as response:
+            total_size = response.content_length or 1
+            downloaded = 0
+            html_content = ""
+
+            chunk_size = max(1, total_size // update_interval)
+
+            async for chunk in response.content.iter_any():
+                html_content += chunk.decode()
+                downloaded += len(chunk)
+
+                progress = min(0.5 * (downloaded / total_size), 0.5)
+                if downloaded % chunk_size == 0:
+                    await update_progress("Downloading", progress)
+
+    await update_progress("Extracting", 0.5)
+
+    video_ids = re.findall(r'"videoId":"([\w-]{11})"', html_content)
+    total_videos = len(video_ids)
+
+    if total_videos == 0:
+        await progress_message.edit(content="No videos found in the playlist.")
+        return video_ids
+
+    for i, _ in enumerate(video_ids, 1):
+        progress = 0.5 + (i / total_videos) * 0.5
+        if i % max(1, total_videos // update_interval) == 0 or i == total_videos:
+            await update_progress("Extracting", progress)
+
+    await progress_message.edit(content=f"✅ Playlist processing complete! Found {total_videos} IDs.")
+    return video_ids
+
+
+async def play_next(ctx, voice_client):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        # Skip if intentional disconnect flagged with autoplay
+        if autoplay_enabled.get(guild_id) and bot.intentional_disconnections.get(guild_id):
+            return
+
+        while not queue_paused.get(guild_id, False):
+            if server_queues[guild_id].empty():
+                # Attempt autoplay chain
+                if autoplay_enabled.get(guild_id):
+                    hist = track_history.get(guild_id, [])
+                    if hist:
+                        last_vid = hist[-1][0]
+                        next_vid = await get_related_video(last_vid, guild_id)
+                        if next_vid:
+                            # enqueue next and continue loop to pick it up
+                            await queue_and_play_next(ctx, guild_id, next_vid)
+                            continue
+                        else:
+                            await messagesender(bot, ctx.channel.id, "Autoplay stopped: no related tracks.")
+                await messagesender(bot, ctx.channel.id, "Queue is empty.")
+                await check_empty_channel(ctx)
+                break
+
+            raw_item = await server_queues[guild_id].get()
+            video_id, video_title, local_file = parse_queue_item(raw_item)
+            if not video_id and not local_file:
+                continue
+
+            # Resolve audio file
+            if local_file:
+                audio_file = local_file if os.path.exists(local_file) else None
+            else:
+                if video_id in preload_tasks:
+                    task = preload_tasks.pop(video_id)
+                    try:
+                        audio_file = await task
+                    except Exception as e:
+                        logging.warning(f"Preload task failed for {video_id}: {e}")
+                        audio_file = None
+                else:
+                    audio_file = await retry_download(video_id)
+
+            if not audio_file:
+                await messagesender(bot, ctx.channel.id, f"Failed to load '{video_title}', skipping.")
+                continue
+
+            add_track_to_history(guild_id, video_id, video_title)
+            await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
+
+        bot.intentional_disconnections[guild_id] = False
+
+
+async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0):
+    guild_id = ctx.guild.id
+
+    if is_banned_title(video_title):
+        await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
+        raise ValueError("Out of bounds error: This content is not allowed.")
+
+    logging.error(f"Playing: {video_title}")
+    metadata = metadata_manager.load_metadata(video_id)
+    if not metadata:
+        metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
+        metadata_manager.save_metadata(video_id, metadata)
+
+    artist = metadata["artist"]
+    title = metadata["title"]
+    duration = metadata.get("duration", "Unknown")
+
+    image_path = fetcher.get_album_art(video_title) or "/app/albumart/default.jpg"
+
+    file = discord.File(image_path, filename="album_art.jpg")
+
+    logging.error(f"Playing: {title} by {artist}")
+    embed = discord.Embed(
+        title="Now Playing",
+        description=f"**{title}**",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url="attachment://album_art.jpg")
+    embed.add_field(name="Artist", value=artist, inline=True)
+    try:
+        embed.add_field(
+            name="Duration",
+            value=(f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown"),
+            inline=True
+        )
+    except Exception:
+        try:
+            duration = int(metadata_manager.ffmpeg_get_track_length(audio_file))
+            embed.add_field(
+                name="Duration",
+                value=(f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration != "Unknown" else "Unknown"),
+                inline=True
+            )
+        except Exception:
+            embed.add_field(name="Duration", value="Unknown", inline=True)
+    embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
+
+    await messagesender(bot, ctx.channel.id, embed=embed, file=file)
+
+    current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
+    current_tracks[guild_id]["start_time"] = time.time() - start_offset
+    current_tracks[guild_id]["audio_file"] = audio_file
+    update_now_playing(guild_id, video_id, video_title, image_path)
+
+    def playback():
+        try:
+            logging.error(f"Playing: {title} by {artist} in thread")
+            seek_option = f"-ss {start_offset}" if start_offset > 0 else "-ss 00:00:00"
+            source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options=f"-bufsize 10m {seek_option}")
+            volume_level = guild_volumes.get(guild_id, 100) / 100
+            source = discord.PCMVolumeTransformer(source, volume=volume_level)
+            voice_client.play(source, after=lambda e: logging.error(f"Playback finished: {e}") if e else None)
+        except Exception as e:
+            logging.error(f"Error during playback: {e}")
+
+    if not audio_file or not os.path.exists(audio_file):
+        logging.error(f"[Playback Error] Audio file not found: {audio_file}")
+        await messagesender(bot, ctx.channel.id, content="❌ Failed to play the track. Skipping...")
+
+        while voice_client and voice_client.is_connected() and voice_client.is_playing():
+            await asyncio.sleep(2)
+        await play_next(ctx, voice_client)
+        return
+
+    await asyncio.to_thread(playback)
+
+    if guild_id in bot.timeout_tasks:
+        bot.timeout_tasks[guild_id].cancel()
+
+    bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(ctx))
+
+    if not server_queues[guild_id].empty():
+        try:
+            pending = list(server_queues[guild_id]._queue)
+            scheduled = 0
+            for raw in pending:
+                if scheduled >= PRELOAD_LIMIT:
+                    break
+                vid, _, local_file = parse_queue_item(raw)
+                if local_file or not vid or vid in preload_tasks:
+                    continue
+                async def _pre(v=vid):
+                    try:
+                        return await download_audio(v)
+                    except Exception as e:
+                        logging.warning(f"Preload failed for {v}: {e}")
+                        return None
+                preload_tasks[vid] = asyncio.create_task(_pre())
+                scheduled += 1
+        except Exception as e:
+            logging.error(f"Preload scheduling error: {e}")
+
+    while voice_client.is_playing():
+        await asyncio.sleep(1)
+
+
+async def safe_voice_connect(bot, guild, voice_channel, max_retries=3, cooldown_seconds=15):
+    guild_id = guild.id
+    now = time.time()
+    last_attempt = reconnect_cooldowns.get(guild_id, 0)
+    if now - last_attempt < cooldown_seconds:
+        logging.info(f"[{guild.name}] Voice connect attempt suppressed by cooldown.")
+        return guild.voice_client
+
+    reconnect_cooldowns[guild_id] = now
+
+    voice_client = guild.voice_client
+    if voice_client and voice_client.is_connected():
+        if voice_client.channel == voice_channel:
+            return voice_client
+        try:
+            await voice_client.disconnect(force=True)
+        except Exception:
+            pass
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            vc = await voice_channel.connect(timeout=15, reconnect=False)
+            if vc.is_connected():
+                logging.info(f"[{guild.name}] Connected to {voice_channel.name} (attempt {attempt}).")
+                return vc
+        except (asyncio.TimeoutError, discord.ClientException) as e:
+            logging.warning(f"[{guild.name}] Connect attempt {attempt} failed: {e}")
+        except Exception:
+            logging.exception(f"[{guild.name}] Unexpected connect error (attempt {attempt})")
+        await asyncio.sleep(3)
+
+    logging.error(f"[{guild.name}] Failed to connect after {max_retries} attempts.")
+    return None
+
 
 @bot.event
 async def on_ready():
@@ -528,20 +875,1444 @@ async def on_ready():
         except Exception as e:
             logging.warning(f"No existing voice clients to disconnect: {e}")
 
-        logging.info(f"Bot is ready! Logged in as {bot.user}")
+        logging.error(f"Bot is ready! Logged in as {bot.user}")
         for guild in bot.guilds:
-                file_path = os.path.join('static', f"{guild.id}.png")
-                if not os.path.exists(file_path):
-                    await download_guild_icon(guild)
+            file_path = os.path.join('static', f"{guild.id}.png")
+            if not os.path.exists(file_path):
+                await download_guild_icon(guild)
     except Exception as e:
         logging.error(f"Error in on_ready: {e}")
+
 
 def update_now_playing(guild_id, track_id, title, album_art_url):
     now_playing[guild_id] = (track_id, title, album_art_url)
 
+
+@bot.command(name="setprefix", aliases=["prefix"])
+async def setprefix(ctx, prefix: str):
+    if not is_owner_or_server_owner(ctx):
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    update_server_config(ctx.guild.id, "prefix", prefix)
+    await messagesender(bot, ctx.channel.id, f"Prefix updated to: `{prefix}`")
+
+
+@bot.command(name="setdjrole", aliases=["setrole"])
+async def setdjrole(ctx, role: discord.Role):
+    if not is_owner_or_server_owner(ctx):
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    update_server_config(ctx.guild.id, "dj_role", role.id)
+    await messagesender(bot, ctx.channel.id, f"DJ role updated to: `{role.name}`")
+
+
+@bot.command(name="setchannel")
+async def setchannel(ctx, channel: discord.TextChannel):
+    if not is_owner_or_server_owner(ctx):
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    update_server_config(ctx.guild.id, "channel", channel.id)
+    await messagesender(bot, ctx.channel.id, f"Designated channel updated to: `{channel.name}`")
+
+
+@bot.command(name="grablist", aliases=["grabplaylist"])
+async def playlister(ctx, *, search: str = None):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if guild_id not in server_queues:
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        if search:
+            playlists_json = await grab_youtube_pl(search)
+            playlists = json.loads(playlists_json)
+
+            if not playlists:
+                await messagesender(bot, ctx.channel.id, "No playlists found for query.")
+                return
+
+            index = 0
+            playlist_id = playlists[index]
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            playlist_title = await get_youtube_playlist_title(playlist_id)
+
+            while "podcast" in playlist_title.lower():
+                index += 1
+                if index >= len(playlists):
+                    await messagesender(bot, ctx.channel.id, "No suitable playlists found (all contained 'podcast').")
+                    return
+                playlist_id = playlists[index]
+                playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+                playlist_title = await get_youtube_playlist_title(playlist_id)
+
+            video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
+            vidscnt = len(video_ids)
+            vidscrn = 0
+            vidsadd = 0
+
+            current_ids = set()
+            scanning_message = await ctx.send("Scanning playlist")
+            for video_id in video_ids:
+                await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})")
+                vidscrn += 1
+                if video_id not in current_ids:
+                    current_ids.add(video_id)
+                    vidsadd += 1
+                    await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
+                    await scanning_message.edit(content=f"Scanning: {video_id} - ({vidscrn}/{vidsadd}/{vidscnt})\nAdded: {video_id}!")
+
+            queue_size = server_queues[guild_id].qsize()
+            await scanning_message.edit(content=f"Added {queue_size} tracks from the playlist to the queue.")
+
+            if ctx.voice_client is None:
+                channel = ctx.author.voice.channel if ctx.author.voice else None
+                if channel:
+                    await channel.connect()
+                else:
+                    await scanning_message.edit(content=f"You are not in a voice channel.")
+                    return
+
+            if not ctx.voice_client.is_playing():
+                await play_next(ctx, ctx.voice_client)
+        else:
+            await messagesender(bot, ctx.channel.id, "No search query entered!")
+
+@bot.command(name="play")
+async def play(ctx, *, srch: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+        patterns = {
+            "bandcamp": r"https?://.*bandcamp\.com/.*",
+            "soundcloud": r"https?://.*soundcloud\.com/.*",
+            "spotify": r"https?://.*spotify\.com/.*",
+            "applemusic": r"https?://.*music\.apple\.com/.*",
+            "youtube": r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/.*"
+        }
+
+        if re.match(patterns["bandcamp"], srch):
+            await bandcamp(ctx, srch)
+        elif re.match(patterns["soundcloud"], srch):
+            await soundcloud(ctx, srch)
+        elif re.match(patterns["spotify"], srch):
+            await spotify(ctx, srch)
+        elif re.match(patterns["applemusic"], srch):
+            await applemusic(ctx, srch)
+        else:
+            await youtube(ctx, search=srch)
+
+@bot.command(name="youtube", aliases=["yt"])
+async def youtube(ctx, *, search: str = None):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+        if search:
+            if "playlist" in search and "list=" in search:
+                playlist_id = search.split("list=")[-1]
+                playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+                video_ids = await fetch_playlist_videos(ctx, playlist_id, playlist_url)
+                current_ids = set()
+
+                scanning_message = await ctx.send(f"Scanning playlist")
+                for video_id in video_ids:
+                    await scanning_message.edit(content=f"Scanned: {video_id}")
+                    if video_id not in current_ids:
+                        current_ids.add(video_id)
+                        await server_queues[guild_id].put([video_id, await get_youtube_video_title(video_id)])
+                        await scanning_message.edit(content=f"added: {video_id}!")
+
+                await messagesender(bot, ctx.channel.id, f"Added {server_queues[guild_id].qsize()} tracks from the playlist to the queue.")
+                if not ctx.voice_client.is_playing():
+                    await play_next(ctx, ctx.voice_client)
+            else:
+                video_id = await fetch_video_id(ctx, search)
+                if video_id:
+                    await queue_and_play_next(ctx, guild_id, video_id)
+                else:
+                    await messagesender(bot, ctx.channel.id, content="Failed to find the song.")
+
+async def handle_voice_connection(ctx):
+    guild_id = ctx.guild.id
+    voice_channel = ctx.author.voice.channel
+    if not ctx.voice_client:
+        bot.intentional_disconnections[guild_id] = False
+        await voice_channel.connect()
+
+async def fetch_video_id(ctx, search: str) -> str:
+    if is_banned_title(search):
+        raise ValueError("Out of bounds error: This content is not allowed.")
+
+    youtube_id_match = re.match(
+        r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/|music\.youtube\.com/watch\?v=)?([\w-]{11})',
+        search
+    )
+    direct_file_match = re.match(r'(https?://\S+\.(mp3|wav|aac|flac))', search)
+
+    if youtube_id_match:
+        return youtube_id_match.group(1)
+    elif direct_file_match:
+        await messagesender(bot, ctx.channel.id, f"Queued direct file: {search}")
+        return search
+    else:
+        return await fetch_video_id_from_ytsearch(search, ctx)
+
+async def fetch_video_id_from_ytsearch(search: str, ctx):
+    loop = asyncio.get_running_loop()
+
+    def run_yt_dlp(opts):
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            try:
+                info = ydl.extract_info(search, download=False)
+                if "entries" not in info or not info["entries"]:
+                    return None
+                return info["entries"][0]["id"]
+            except Exception:
+                return None
+
+    ydl_opts_music = {
+        "default_search": "ytsearch1",
+        "quiet": True,
+        "no_warnings": True,
+        "youtube_include_dash_manifest": False,
+        "extract_flat": True,
+        "source_address": "0.0.0.0",
+        "geo_bypass": True,
+        "noplaylist": True,
+        "force_generic_extractor": True,
+        "format": "bestaudio",
+        "cookiesfrombrowser": ("chrome",),
+        "youtube_include_hls_manifest": False,
+        "force_url": "https://music.youtube.com/"
+    }
+
+    result = await loop.run_in_executor(None, lambda: run_yt_dlp(ydl_opts_music))
+
+    if not result:
+        ydl_opts_regular = {
+            "default_search": "ytsearch1",
+            "quiet": True,
+            "no_warnings": True,
+        }
+        result = await loop.run_in_executor(None, lambda: run_yt_dlp(ydl_opts_regular))
+
+    if not result:
+        await messagesender(bot, ctx.channel.id, f"Failed to find a song for: `{search}`")
+        return None
+
+    return result
+
+async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None, local_file_path: str = None):
+    try:
+        if title is None:
+            video_title = await get_youtube_video_title(video_id)
+            if not video_title:
+                await messagesender(bot, ctx.channel.id, "Failed to retrieve video title.")
+                return
+        else:
+            video_title = title
+
+        # Uniform dict-based queue item
+        queue_item = {"video_id": video_id, "title": video_title}
+        if local_file_path:
+            queue_item["file_path"] = local_file_path
+        await server_queues[guild_id].put(queue_item)
+        await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
+
+        if not ctx.voice_client:
+            if ctx.author.voice and ctx.author.voice.channel:
+                await ctx.author.voice.channel.connect()
+            else:
+                await messagesender(bot, ctx.channel.id, "Join a voice channel first.")
+                return
+
+        if not ctx.voice_client.is_playing():
+            asyncio.create_task(play_next(ctx, ctx.voice_client))
+
+    except Exception as e:
+        await messagesender(bot, ctx.channel.id, f"Error adding to queue: {e}")
+
+
+def get_current_elapsed_time(guild_id: int) -> int:
+    """
+    Returns the elapsed playback time (in seconds) for the current track in the guild.
+    """
+    track_state = current_tracks.get(guild_id, {})
+    start_time = track_state.get("start_time")
+    if start_time is None:
+        return 0
+    return int(time.time() - start_time)
+
+
+def retrieve_audio_file_for_current_track(guild_id: int) -> str:
+    """
+    Returns the stored audio file path for the current track in the guild.
+    """
+    track_state = current_tracks.get(guild_id, {})
+    return track_state.get("audio_file", None)
+
+
+@bot.command(name="skip", aliases=["next"])
+async def skip(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if ctx.voice_client and ctx.voice_client.is_playing():
+            ctx.voice_client.stop()
+            await messagesender(bot, ctx.channel.id, content="Skipped the current track.")
+
+@bot.command(name="stop")
+async def stop(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if ctx.voice_client:
+            bot.intentional_disconnections[guild_id] = True
+            await ctx.voice_client.disconnect()
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+            await messagesender(bot, ctx.channel.id, content="Stopped the bot and left the voice channel.")
+
+@bot.command(name="pause", aliases=["hold"])
+async def pause(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if ctx.voice_client and ctx.voice_client.is_playing():
+            current_tracks.setdefault(guild_id, {})["paused_position"] = get_current_elapsed_time(guild_id)
+            ctx.voice_client.pause()
+            queue_paused[guild_id] = True
+            await messagesender(bot, ctx.channel.id, content="Paused the music")
+
+@bot.command(name="resume", aliases=["continue"])
+async def resume(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if ctx.voice_client and ctx.voice_client.is_paused():
+            ctx.voice_client.resume()
+            queue_paused[guild_id] = False
+            paused_pos = current_tracks.get(guild_id, {}).pop("paused_position", None)
+            if paused_pos is not None:
+                current_tracks[guild_id]["start_time"] = time.time() - paused_pos
+            await messagesender(bot, ctx.channel.id, content="Resumed the music")
+
+@bot.command(name="queue", aliases=["list"])
+async def show_queue(ctx, page: int = 1):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if guild_id not in server_queues or server_queues[guild_id].empty():
+            await messagesender(bot, ctx.channel.id, content="The queue is empty.")
+            return
+
+        queue = list(server_queues[guild_id]._queue)
+
+        items_per_page = QUEUE_PAGE_SIZE
+        total_pages = (len(queue) + items_per_page - 1) // items_per_page
+
+        if page < 1 or page > total_pages:
+            await messagesender(bot, ctx.channel.id, f"Invalid page number. Please enter a number between 1 and {total_pages}.")
+            return
+
+        start_index = (page - 1) * items_per_page
+        end_index = min(start_index + items_per_page, len(queue))
+
+        queue_slice = queue[start_index:end_index]
+        embed = discord.Embed(title=f"Music Queue (Page {page} of {total_pages})", color=discord.Color.blue())
+
+        for index, item in enumerate(queue_slice, start=start_index + 1):
+            try:
+                video_id = ''.join(item[:1])
+                video_title = ''.join(item[1:])
+                embed.add_field(name=f"{index}. {video_id}", value=video_title, inline=False)
+            except Exception as e:
+                logging.error("Something was borked.")
+        await messagesender(bot, ctx.channel.id, embed=embed)
+
+@bot.command(name="search", aliases=["find"])
+async def search(ctx, *, query: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        ydl_opts = {"default_search": "ytsearch10", "quiet": True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(query, download=False)
+                results = info['entries']
+
+                if not results:
+                    await messagesender(bot, ctx.channel.id, content="No search results found.")
+                    return
+
+                embed = discord.Embed(title=f"Search Results: {query}", color=discord.Color.green())
+                for entry in results[:10]:
+                    video_id = entry['id']
+                    video_title = entry['title']
+
+                    embed.add_field(name=video_title, value=f"```{ctx.prefix}yt {video_id}```", inline=False)
+                await messagesender(bot, ctx.channel.id, embed=embed)
+
+            except Exception as e:
+                await messagesender(bot, ctx.channel.id, f"Failed to search: {e}")
+
+@bot.command(name="clear")
+async def clear(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if server_queues.get(guild_id):
+            server_queues[guild_id]._queue.clear()
+        await messagesender(bot, ctx.channel.id, content="Cleared the queue.")
+
+@bot.command(name="remove")
+async def remove(ctx, index: int):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        try:
+            removed = server_queues[guild_id]._queue.pop(index - 1)
+            vid, title, _ = parse_queue_item(removed)
+            await messagesender(bot, ctx.channel.id, f"Removed: {title} ({vid})")
+        except IndexError:
+            await messagesender(bot, ctx.channel.id, content="Invalid index.")
+
+@bot.command(name="loop", aliases=["repeat"])
+async def loop(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        current_tracks[guild_id]["is_looping"] = not current_tracks[guild_id].get("is_looping", False)
+        await messagesender(bot, ctx.channel.id, content="Looping " + ("enabled." if current_tracks[guild_id]["is_looping"] else "disabled."))
+
+@bot.command(name="nowplaying", aliases=["current", "np"])
+async def nowplaying(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        current_track = current_tracks.get(guild_id, {}).get("current_track")
+        if not current_track:
+            await messagesender(bot, ctx.channel.id, content="No track is currently playing.")
+            return
+
+        video_id = current_track[0]
+        metadata = metadata_manager.load_metadata(video_id)
+        if not metadata:
+            video_title = current_track[1]
+            metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
+            metadata_manager.save_metadata(video_id, metadata)
+
+        artist = metadata["artist"]
+        title = metadata["title"]
+        duration = metadata.get("duration", "Unknown")
+
+        image_path = fetcher.get_album_art(title)
+        if not image_path:
+            image_path = "/app/albumart/default.jpg"
+
+        file = discord.File(image_path, filename="album_art.jpg")
+
+        embed = discord.Embed(
+            title="Now Playing",
+            description=f"**{title}**",
+            color=discord.Color.blue()
+        )
+        embed.set_thumbnail(url="attachment://album_art.jpg")
+        embed.add_field(name="Artist", value=artist, inline=True)
+        try:
+            embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+        except Exception as e:
+            try:
+                duration = metadata_manager.ffmpeg_get_track_length(audio_file)
+                embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}" if duration != "Unknown" else "Unknown", inline=True)
+            except Exception as e:
+                Embed.add_field(name="Duration", value="Unknown", inline=True)
+        embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
+
+        await messagesender(bot, ctx.channel.id, embed=embed, file=file)
+
+@bot.command(name="shutdown", aliases=["die"])
+async def shutdown(ctx):
+    logging.error(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
+    if ctx.author.id == BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="Shutting down.")
+        await bot.close()
+    else:
+        await messagesender(bot, ctx.channel.id, content="You do not have permission to shut down the bot.")
+
+@bot.command(name="reboot", aliases=["restart"])
+async def reboot(ctx):
+    logging.error(f"Requesting ID: {ctx.author.id}\nOwner ID:{BOT_OWNER_ID}")
+    if ctx.author.id == BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="Restarting the bot...")
+        os.execv(sys.executable, ['python'] + sys.argv)
+    else:
+        await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
+
+@bot.command(name="dockboot", aliases=["dockerrestart"])
+async def dockboot(ctx):
+    logging.error(f"Requesting ID: {ctx.author.id}\nOwner ID: {BOT_OWNER_ID}")
+    if ctx.author.id == BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="Shutting down and restarting")
+        subprocess.Popen(["/bin/bash", "init.sh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os._exit(0)
+    else:
+        await messagesender(bot, ctx.channel.id, content="You do not have permission to restart the bot.")
+
+@bot.command(name="say")
+async def say(ctx, guild_id: int, channel_id: int, *, message: str):
+    """
+    Makes the bot send a specified message in a given channel from a given server.
+    Only available via DM from the bot owner.
+    Usage: say <guild_id> <channel_id> "<message>"
+    """
+    if ctx.guild is not None:
+        await ctx.send("❌ This command can only be used in DMs.")
+        return
+
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("❌ You are not authorized to use this command.")
+        return
+
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        await ctx.send("❌ Could not find the specified guild.")
+        return
+
+    channel = guild.get_channel(channel_id)
+    if channel is None:
+        await ctx.send("❌ Could not find the specified channel in the given guild.")
+        return
+
+    try:
+        await channel.send(message)
+        await ctx.send("✅ Message sent successfully.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to send message: {e}")
+
+
+@bot.command(name="seek")
+async def seek(ctx, position: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
+            return
+
+        current_track = current_tracks.get(guild_id, {}).get("current_track")
+        if not current_track:
+            await messagesender(bot, ctx.channel.id, content="There's no track information available to seek.")
+            return
+
+        video_id = current_track[0]
+        audio_file = f"music/{video_id}.mp3"
+        if not os.path.exists(audio_file):
+            audio_file = f"music/{video_id}.opus"
+        if not os.path.exists(audio_file):
+            await messagesender(bot, ctx.channel.id, content="Audio file not found for seeking.")
+            return
+
+        def get_audio_duration(file_path):
+            try:
+                result = subprocess.run(
+                    ["ffmpeg", "-i", file_path, "-f", "null", "-"],
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                duration_line = [line for line in result.stderr.split("\n") if "Duration" in line]
+                if duration_line:
+                    time_str = duration_line[0].split(",")[0].split("Duration:")[1].strip()
+                    h, m, s = map(float, time_str.split(":"))
+                    return int(h * 3600 + m * 60 + s)
+            except Exception as e:
+                logging.error(f"Error getting duration: {e}")
+            return None
+
+        duration = get_audio_duration(audio_file)
+        if not duration:
+            await messagesender(bot, ctx.channel.id, content="Could not determine audio duration.")
+            return
+
+        try:
+            if position.endswith("%"):
+                percent = int(position.strip("%"))
+                if not (0 <= percent <= 100):
+                    raise ValueError("Percentage must be between 0 and 100.")
+                seconds = int(duration * (percent / 100))
+            elif ":" in position:
+                minutes, seconds = map(int, position.split(":"))
+                seconds = minutes * 60 + seconds
+            else:
+                seconds = int(position)
+
+            if seconds < 0 or seconds > duration:
+                raise ValueError(f"Position must be between 0 and {duration} seconds.")
+
+            ctx.voice_client.stop()
+            ffmpeg_options = f"-ss {seconds} -bufsize 10m"
+            source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options=ffmpeg_options)
+            ctx.voice_client.play(source, after=lambda _: asyncio.run_coroutine_threadsafe(play_next(ctx, ctx.voice_client), bot.loop))
+
+            await messagesender(bot, ctx.channel.id, f"⏩ Seeking to `{seconds}` seconds.")
+
+        except Exception as e:
+            await messagesender(bot, ctx.channel.id, f"An error occurred while seeking: {e}")
+
+
+@bot.command(name="setnick", aliases=["nickname"])
+async def setnick(ctx, *, nickname: str = None):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+
+    try:
+        await ctx.guild.me.edit(nick=nickname)
+        await messagesender(bot, ctx.channel.id, content=f"Bot nickname changed to `{nickname}`")
+    except Exception as e:
+        await messagesender(bot, ctx.channel.id, content=f"Failed to change nickname: {e}")
+
+
+@bot.command(name="cmds", aliases=["commands"])
+async def help_command(ctx):
+    async with ctx.typing():
+        commands_text = """Available Commands:
+        
+        🎵 **Music Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        play <query>      | None           | Play a song
+        pause             | hold           | Pause the music
+        resume            | continue       | Resume the music
+        stop              | None           | Stop the bot
+        queue             | list           | Show the current queue
+        skip              | next           | Skip the current song
+        seek <time/%>     | None           | Seek to a timestamp or percentage
+        volume <0-200>    | vol            | Adjust playback volume
+        autoplay <on/off> | autodj         | Toggle autoplay mode
+        
+        ⌚ **Queue Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        clear             | None           | Clear the queue
+        remove <#>        | None           | Remove a song from the queue
+        loop              | repeat         | Toggle looping
+        shuffle           | None           | Shuffle the queue
+        move <#> <#>      | None           | Move a song in the queue
+        history           | played         | Show recently played tracks
+        
+        ⚙️ **Configuration**
+        Command            | Aliases        | Description
+        -------------------|----------------|--------------------------------
+        setprefix <p>      | prefix         | Change the bot prefix
+        setdjrole <r>      | setrole        | Assign DJ role
+        setchannel <c>     | None           | Restrict bot to a channel
+        debugmode          | None           | Toggle debug logging
+        showstats          | None           | Toggle bot stats in profile
+        
+        🛠️ **Admin Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        shutdown          | die            | Shut down the bot
+        reboot            | restart        | Restart the bot
+        backupqueue       | None           | Backup current queue
+        restorequeue      | None           | Restore a queue
+        banuser @user     | None           | Ban a user from using the bot
+        unbanuser @user   | None           | Unban a user
+        bannedlist        | None           | Show banned users
+        purgequeues       | None           | Clear queues across all servers
+        
+        📜 **Other Commands**
+        Command           | Aliases        | Description
+        ------------------|----------------|---------------------------------
+        version           | ver            | Show bot version
+        stats             | None           | Show bot statistics
+        invite            | link           | Get bot invite link
+        sendplox          | None           | Send current track as a file
+        sendglobalmsg     | None           | Send a message to all servers
+        blacklist <song>  | None           | Block a specific song
+        whitelist <song>  | None           | Remove a song from the blacklist
+        """
+        
+        with open(COMMANDS_FILE_PATH, "w") as f:
+            f.write(commands_text)
+     
+        try:
+            await ctx.author.send(file=discord.File(COMMANDS_FILE_PATH))
+            await ctx.send(f"{ctx.author.mention}, I've sent you the command list as a file.")
+        except discord.Forbidden:
+            await ctx.send(f"{ctx.author.mention}, I couldn't send you a DM. Please check your privacy settings.")
+
+@bot.command(name="mute", aliases=["quiet"])
+async def toggle_mute(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+        
+        voice_client = ctx.voice_client
+
+        if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
+            if voice_client.is_paused():
+                voice_client.resume()
+                await messagesender(bot, ctx.channel.id, content="Unmuted the bot. 🔊")
+            else:
+                voice_client.pause()
+                await messagesender(bot, ctx.channel.id, content="Muted the bot. 🔇")
+        else:
+            await messagesender(bot, ctx.channel.id, content="I'm not playing anything to mute or unmute.")
+
+@bot.command(name="lyrics", aliases=["lyr"])
+async def lyrics(ctx, *, song: str = None):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+        
+        queue = list(server_queues.get(guild_id, asyncio.Queue())._queue)   
+        lyrics_fetcher = Lyrics(ctx, queue)
+
+        try:
+            if not song:
+                current_track = current_tracks.get(guild_id, {}).get("current_track")
+                if not current_track:
+                    await messagesender(bot, ctx.channel.id, content="No song is currently playing.")
+                    return
+                video_title = ''.join(current_track[1:])
+            else:
+                video_id = await fetch_video_id_from_ytsearch(song, ctx)
+                if not video_id:
+                    return 
+                video_title = await get_youtube_video_title(video_id)
+
+            result = musicbrainzngs.search_recordings(query=video_title, limit=1)
+            if not result["recording-list"]:
+                await messagesender(bot, ctx.channel.id, f"No matching song found on MusicBrainz for: {song}")
+                return
+
+            recording = result["recording-list"][0]
+            artist_name = recording["artist-credit"][0]["artist"]["name"]
+            track_title = recording["title"]
+
+            lyrics = lyrics_fetcher.get_lyrics(track_title, artist_name)
+            if lyrics:
+                embed = Embed(
+                    title=f"Lyrics: {track_title} by {artist_name}",
+                    description=lyrics[:2048],
+                    color=discord.Color.purple()
+                )
+                await messagesender(bot, ctx.channel.id, embed=embed)
+            else:
+                await messagesender(bot, ctx.channel.id, f"Lyrics not found for: {track_title} by {artist_name}")
+
+        except Exception as e:
+            await messagesender(bot, ctx.channel.id, f"An error occurred: {e}")
+
+@bot.command(name="volume", aliases=["vol"])
+async def volume(ctx, volume: int):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        
+        if not await check_perms(ctx, guild_id):
+            return
+        
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await messagesender(bot, ctx.channel.id, content="There's no audio currently playing.")
+            return
+        
+        if 0 <= volume <= 200:
+            ctx.voice_client.source = discord.PCMVolumeTransformer(ctx.voice_client.source)
+            ctx.voice_client.source.volume = volume / 100
+            guild_volumes[guild_id] = volume
+            save_volume_settings(guild_volumes)
+            await messagesender(bot, ctx.channel.id, f"Volume set to {volume}% and saved.")
+        else:
+            await messagesender(bot, ctx.channel.id, content="Volume must be between 0 and 200.")
+
+@bot.command(name="shuffle")
+async def shuffle_queue(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+        
+        if server_queues.get(guild_id) and len(server_queues[guild_id]._queue) > 1:
+            random.shuffle(server_queues[guild_id]._queue)
+            await messagesender(bot, ctx.channel.id, content="The queue has been shuffled! 🔀")
+        else:
+            await messagesender(bot, ctx.channel.id, content="The queue is too short to shuffle.")
+
+@bot.command(name="invite", aliases=["link"])
+async def invite(ctx):
+    bot_id = bot.user.id 
+    permissions = 277025515584
+    scopes = "bot"
+    invite_url = f"https://discord.com/oauth2/authorize?client_id={bot_id}&permissions={permissions}&scope={scopes}"
+    await ctx.author.send(f"<:afoyawn:1330375212302336030> Invite me to your server using this link: {invite_url}")
+
+@bot.command(name="move")
+async def move_song(ctx, from_pos: int, to_pos: int):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+        
+        queue = server_queues.get(guild_id)._queue if server_queues.get(guild_id) else None
+
+        if queue and 1 <= from_pos <= len(queue) and 1 <= to_pos <= len(queue):
+            from_pos -= 1
+            to_pos -= 1
+            track = queue[from_pos]
+            del queue[from_pos]
+            queue.insert(to_pos, track)
+
+            await messagesender(bot, ctx.channel.id, f"Moved **{''.join(track[1:])}** from position {from_pos + 1} to {to_pos + 1}.")
+        else:
+            await messagesender(bot, ctx.channel.id, content="Invalid positions. Please provide valid track numbers from the queue.")
+
+@bot.command(name="join", aliases=["come"])
+async def join_channel(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if ctx.author.voice:
+            channel = ctx.author.voice.channel
+            bot.intentional_disconnections[guild_id] = False
+
+            voice_client = await safe_voice_connect(bot, ctx.guild, channel)
+
+            if voice_client and voice_client.is_connected():
+                await messagesender(bot, ctx.channel.id, f"✅ Joined **{channel.name}** voice channel. 🎤")
+            else:
+                await messagesender(bot, ctx.channel.id, f"❌ Failed to join **{channel.name}**.")
+        else:
+            await messagesender(bot, ctx.channel.id, content="❗ You need to be in a voice channel for me to join!")
+
+@bot.command(name="leave", aliases=["go"])
+async def leave_channel(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+        
+        if ctx.voice_client:
+            bot.intentional_disconnections[guild_id] = True
+            await ctx.voice_client.disconnect()
+            await messagesender(bot, ctx.channel.id, content="Disconnected from the voice channel. 👋")
+        else:
+            await messagesender(bot, ctx.channel.id, content="I'm not in a voice channel to leave.")
+
+@bot.command(name="forceplay", aliases=["fplay"])
+async def forceplay(ctx, *, query: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+
+    guild_id = ctx.guild.id
+    await messagesender(bot, ctx.channel.id, content=f"Forcing playback for: {query}")
+    await play(ctx, srch=query)
+    await asyncio.sleep(1)
+
+    if ctx.voice_client and ctx.voice_client.is_playing():
+        logging.error("Having to move things.")
+        queue = server_queues.get(guild_id)._queue if server_queues.get(guild_id) else None
+
+        if queue and len(queue) > 1:
+            from_pos = len(queue) - 1
+            to_pos = 1
+            try:
+                from_pos -= 1
+                to_pos -= 1
+                track = queue[from_pos]
+                del queue[from_pos]
+                queue.insert(to_pos, track)
+            except IndexError:
+                logging.error("Error moving track in fplay: Invalid index")
+
+        ctx.voice_client.stop()
+
+
+@bot.command(name="backupqueue")
+async def backup_queue(ctx, scope: str = "guild"):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if scope == "global":
+        save_queue_backup()
+        await messagesender(bot, ctx.channel.id, content="Global queue backup saved.")
+    else:
+        save_queue_backup(ctx.guild.id)
+        await messagesender(bot, ctx.channel.id, content=f"Queue backup saved for {ctx.guild.name}.")
+
+@bot.command(name="restorequeue")
+async def restore_queue(ctx, scope: str = "guild"):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if scope == "global":
+        backup_data = load_queue_backup()
+        for gid, queue_data in backup_data.items():
+            if gid not in server_queues:
+                server_queues[gid] = asyncio.Queue()
+        for item in backup_data.get(str(ctx.guild.id), []):
+            # Wrap legacy list into dict on insert (non-destructive if already dict)
+            if isinstance(item, list) and len(item) >= 2:
+                server_queues[ctx.guild.id]._queue.append(
+                    {"video_id": item[0], "title": item[1]}
+                )
+            else:
+                await server_queues[ctx.guild.id].put(item)
+        await messagesender(bot, ctx.channel.id, content="Global queue restored.")
+    else:
+        backup_data = load_queue_backup(ctx.guild.id)
+        if ctx.guild.id not in server_queues:
+            server_queues[ctx.guild.id] = asyncio.Queue()
+        for item in backup_data.get(str(ctx.guild.id), []):
+            await server_queues[ctx.guild.id].put(item)
+        await messagesender(bot, ctx.channel.id, content=f"Queue restored for {ctx.guild.name}.")
+
+@bot.command(name="banuser")
+async def banuser(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    banned_users[user.id] = user.name
+    save_banned_users(banned_users)
+    await messagesender(bot, ctx.channel.id, content=f"{user.name} has been banned from using the bot.")
+
+@bot.command(name="unbanuser")
+async def unbanuser(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if user.id in banned_users:
+        del banned_users[user.id]
+        save_banned_users(banned_users)
+        await messagesender(bot, ctx.channel.id, content=f"{user.name} has been unbanned from using the bot.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"{user.name} is not banned.")
+
+@bot.command(name="bannedlist")
+async def bannedlist(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if not banned_users:
+        await messagesender(bot, ctx.channel.id, content="No users are currently banned.")
+    else:
+        banned_list = "\n".join([f"{uid}: {name}" for uid, name in banned_users.items()])
+        await messagesender(bot, ctx.channel.id, content=f"Banned Users:\n{banned_list}")
+
+@bot.command(name="fetchlogs", aliases=["logs"])
+async def fetchlogs(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+
+    if not os.path.exists(LOG_FILE):
+        await messagesender(bot, ctx.channel.id, content="File not found.")
+        return
+
+    file_size = os.path.getsize(LOG_FILE)
+    if file_size > 8 * 1024 * 1024:
+        zip_path = LOG_FILE + ".zip"
+        shutil.make_archive(LOG_FILE, 'zip', root_dir=os.path.dirname(LOG_FILE), base_dir=os.path.basename(LOG_FILE))
+        zip_size = os.path.getsize(zip_path)
+        if zip_size > 8 * 1024 * 1024:
+            split_path = LOG_FILE + ".7z"
+            split_command = f'7z a -t7z -v7m "{split_path}" "{LOG_FILE}"'
+            subprocess.run(split_command, shell=True)
+            split_parts = [f for f in os.listdir(os.path.dirname(LOG_FILE)) if f.startswith(os.path.basename(split_path))]
+            for part in sorted(split_parts):
+                part_path = os.path.join(os.path.dirname(LOG_FILE), part)
+                await ctx.author.send(file=discord.File(part_path))
+                os.remove(part_path)
+        else:
+            with open(zip_path, 'rb') as file:
+                await ctx.author.typing()
+                await ctx.author.send(file=discord.File(file, filename=os.path.basename(zip_path)))
+            os.remove(zip_path) 
+    else:
+        with open(LOG_FILE, 'rb') as file:
+            await ctx.author.typing()
+            await ctx.author.send(file=discord.File(file, filename=os.path.basename(LOG_FILE)))
+            await messagesender(bot, ctx.channel.id, content="Sent debug logs via DM.")
+
+@bot.command(name="version", aliases=["ver"])
+async def version(ctx):
+    async with ctx.typing():
+                                            #[HHMMSS-DDMMYYYY]
+        embed = discord.Embed(
+            title=f"DtownBeats - Version 0.4J.5 [023323-04072025]",
+            description="🎵 Bringing beats to your server with style!",
+            color=discord.Color.dark_blue()
+        )
+
+        embed.set_thumbnail(url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
+    
+        embed.add_field(name="", value=(""), inline=False)
+
+        embed.add_field(
+            name="📜 Source Code",
+            value="[GitHub Repository](https://github.com/Angablade/DtownBeats)",
+            inline=False
+        )
+
+        embed.add_field(name="", value=(""), inline=False)
+
+        embed.add_field(
+            name="🐳 Docker Image",
+            value="```\ndocker pull angablade/dtownbeats:latest```",
+            inline=False
+        )
+    
+        embed.add_field(name="", value=(""), inline=False)
+
+        embed.set_footer(
+            text=f"Created by Angablade",
+            icon_url="https://img.angablade.com/ab-w.png"
+        )
+
+        try:
+            await ctx.author.send(embed=embed)
+            await messagesender(bot, ctx.channel.id, content="I've sent you a DM with the bot version. 📬")
+        except discord.Forbidden:
+            await messagesender(bot, ctx.channel.id, content="I couldn't send you a DM. Please check your privacy settings.")
+
+@bot.command(name="sendplox", aliases=["dlfile"])
+async def sendmp3(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        current_track = current_tracks.get(guild_id, {}).get("current_track")
+        if not current_track:
+            await messagesender(bot, ctx.channel.id, "No current track.")
+            return
+        video_id = current_track[0]
+        candidates = [f"music/{video_id}.mp3", f"music/{video_id}.opus"]
+        file_path = next((p for p in candidates if os.path.exists(p)), None)
+        if not file_path:
+             await messagesender(bot, ctx.channel.id, content="File not found.")
+             return
+        
+        file_size = os.path.getsize(file_path)
+        if file_size > 8 * 1024 * 1024:
+            zip_path = file_path + ".zip"
+            shutil.make_archive(file_path, 'zip', root_dir=os.path.dirname(file_path), base_dir=os.path.basename(file_path))
+            zip_size = os.path.getsize(zip_path)
+            if zip_size > 8 * 1024 * 1024:
+                split_path = file_path + ".7z"
+                split_command = f'7z a -t7z -v7m "{split_path}" "{file_path}"'
+                subprocess.run(split_command, shell=True)
+                split_parts = [f for f in os.listdir(os.path.dirname(file_path)) if f.startswith(os.path.basename(split_path))]
+                for part in sorted(split_parts):
+                    part_path = os.path.join(os.path.dirname(file_path), part)
+                    await ctx.author.send(file=discord.File(part_path))
+                    os.remove(part_path)
+            else:
+                with open(zip_path, 'rb') as file:
+                    await ctx.author.typing()
+                    await ctx.author.send(file=discord.File(file, filename=os.path.basename(zip_path)))
+                os.remove(zip_path) 
+        else:
+            with open(file_path, 'rb') as file:
+                await ctx.author.typing()
+                await ctx.author.send(file=discord.File(file, filename=os.path.basename(file_path)))
+
+
+@bot.command(name="blacklist")
+async def blacklist(ctx, *, song: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if song.lower() not in blacklist_data["blacklist"]:
+        blacklist_data["blacklist"].append(song.lower())
+        save_blacklist(blacklist_data)
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` has been blacklisted.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is already blacklisted.")
+
+@bot.command(name="whitelist")
+async def whitelist(ctx, *, song: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    if song.lower() in blacklist_data["blacklist"]:
+        blacklist_data["blacklist"].remove(song.lower())
+        save_blacklist(blacklist_data)
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` has been removed from the blacklist.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is not in the blacklist.")
+
+@bot.command(name="blacklistcheck")
+async def blacklist_check(ctx, *, song: str):
+    if is_banned_title(song):
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is blacklisted.")
+    else:
+        await messagesender(bot, ctx.channel.id, content=f"`{song}` is not blacklisted.")
+
+@bot.command(name="debugmode")
+async def toggle_debug(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    debug_config["debug"] = not debug_config["debug"]
+    save_debug_mode(debug_config)
+    state = "enabled" if debug_config["debug"] else "disabled"
+    await messagesender(bot, ctx.channel.id, content=f"Debug mode has been {state}.")
+
+@bot.command(name="bandcamp", aliases=["bc"])
+async def bandcamp(ctx, url: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+    
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+    
+        await messagesender(bot, ctx.channel.id, f"Processing Bandcamp link: <{url}>")
+        file_path = await get_bandcamp_audio(url)
+        if file_path:
+            trackdata = await get_bandcamp_title(url)
+            await queue_and_play_next(ctx, ctx.guild.id, file_path, trackdata)
+        else:
+            await messagesender(bot, ctx.channel.id, "Failed to process Bandcamp track.")
+
+@bot.command(name="soundcloud", aliases=["sc"])
+async def soundcloud(ctx, url: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+    
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+    
+        await messagesender(bot, ctx.channel.id, f"Processing SoundCloud link: <{url}>")
+        file_path = await get_soundcloud_audio(url)
+        soundcloud_title = await get_soundcloud_title(url)
+        if file_path:
+            await queue_and_play_next(ctx, ctx.guild.id, file_path, soundcloud_title)
+        else:
+            await messagesender(bot, ctx.channel.id, f"Failed to process SoundCloud track. ({file_path})")
+
+@bot.command(name="spotify", aliases=["sp"])
+async def spotify(ctx, url: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if guild_id not in server_queues:
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+
+        track_urls = [url]
+
+        if "playlist" in url:
+            await messagesender(bot, ctx.channel.id, f"Fetching Spotify playlist: <{url}>")
+            try:
+                track_urls = await run_blocking_in_executor(get_spotify_tracks_from_playlist, url)
+
+                if not track_urls:
+                    await messagesender(bot, ctx.channel.id, "❌ Failed to retrieve tracks from Spotify playlist.")
+                    return
+            except Exception as e:
+                await messagesender(bot, ctx.channel.id, f"⚠️ Error processing Spotify: {e}")
+                return
+
+        total_tracks = len(track_urls)
+        if total_tracks == 0:
+            await messagesender(bot, ctx.channel.id, "❌ No tracks found")
+            return
+
+        progress_message = await ctx.send(f"🔄 Processing {total_tracks} track(s) from Spotify")
+
+        async def update_progress(current):
+            bar_length = 20
+            progress = current / total_tracks
+            filled_length = int(bar_length * progress)
+            bar = "█" * filled_length + "░" * (bar_length - filled_length)
+            await progress_message.edit(content=f"🔄 Processing Spotify\n[{bar}] {current}/{total_tracks}")
+
+        def _download_sync(ydl_opts, url):
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info("https://music.youtube.com/watch?v=" + url, download=True)
+
+        async def S_download_audio(youtube_link):
+            output_path = f"music/{youtube_link}.mp3"
+            ydl_opts = {
+                'format': 'bestaudio[acodec^=opus]/bestaudio',
+                'cookies': "/config/cookies.txt",
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '320',
+                }],
+                'outtmpl': f'music/%(id)s',
+            }
+
+            try:
+                await run_blocking_in_executor(_download_sync, ydl_opts, youtube_link)
+                return output_path
+            except Exception as e:
+                logging.error(f"Error downloading mp3 format from {youtube_link}: {e}")
+                return False
+
+        async def process_track(track_url):
+            try:
+                logging.error(f"🔍 Converting track: {track_url}")
+                youtube_link = await run_blocking_in_executor(spotify_to_youtube, track_url)
+
+                if not youtube_link:
+                    logging.error(f"❌ Failed to convert {track_url}")
+                    return None
+
+                file_path = await S_download_audio(youtube_link)
+                spotify_title = await run_blocking_in_executor(get_spotify_title, track_url)
+                return file_path, spotify_title
+
+            except Exception as e:
+                logging.error(f"⚠️ Error processing track {track_url}: {e}")
+                return None
+
+        tasks = [process_track(track_url) for track_url in track_urls]
+        results = await asyncio.gather(*tasks)
+
+        queue_count = 0
+        for idx, result in enumerate(results, start=1):
+            await update_progress(idx)
+            if result:
+                file_path, spotify_title = result
+                await server_queues[guild_id].put([file_path, spotify_title])
+                queue_count += 1
+
+        if queue_count == 0:
+            await progress_message.edit(content="❌ No tracks were added to the queue.")
+        else:
+            await progress_message.edit(content=f"✅ Added {queue_count}/{total_tracks} tracks to the queue.")
+
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await play_next(ctx, ctx.voice_client)
+
+@bot.command(name="applemusic", aliases=["ap"])
+async def applemusic(ctx, url: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+    
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if not server_queues.get(guild_id):
+            server_queues[guild_id] = asyncio.Queue()
+            current_tracks[guild_id] = {"current_track": None, "is_looping": False}
+
+        await handle_voice_connection(ctx)
+    
+        await messagesender(bot, ctx.channel.id, f"Processing Apple Music link: <{url}>")
+        video_id = await get_apple_music_audio(ctx, url)
+        if video_id:
+            await queue_and_play_next(ctx, guild_id, video_id)
+        else:
+            await messagesender(bot, ctx.channel.id, content="Failed to find the song.")
+
+@bot.command(name="history", aliases=["played"])
+async def history(ctx):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        history_list = track_history.get(guild_id, [])
+
+        if not history_list:
+            await messagesender(bot, ctx.channel.id, "No recent tracks available.")
+            return
+    
+        embed = discord.Embed(title="\U0001F3B5 Recently Played Songs", color=discord.Color.blue())
+        for index, track in enumerate(history_list[-HISTORY_PAGE_SIZE:], start=1):
+            embed.add_field(name=f"{index}. {track[1]}", value=f"ID: {track[0]}", inline=False)
+        await messagesender(bot, ctx.channel.id, embed=embed)
+
+@bot.command(name="autoplay", aliases=["autodj"])
+async def autoplay(ctx, mode: str):
+    async with ctx.typing():
+        guild_id = ctx.guild.id
+        if not await check_perms(ctx, guild_id):
+            return
+
+        if mode.lower() not in ["on", "off"]:
+            await messagesender(bot, ctx.channel.id, "Use `!autoplay on` or `!autoplay off`.")
+            return
+
+        autoplay_value = mode.lower() == "on"
+        autoplay_enabled[guild_id] = autoplay_value
+        update_server_config(guild_id, "autoplay", autoplay_value)
+        bot.intentional_disconnections[guild_id] = False 
+
+        status = "enabled" if autoplay_value else "disabled"
+        await messagesender(bot, ctx.channel.id, f"Autoplay is now {status} for this server.")
+
+@bot.command(name="stats")
+async def stats(ctx):
+    uptime = time.time() - start_time
+    server_count = len(bot.guilds)
+
+    if platform.system() == "Windows":
+        process = os.popen('wmic process where "ProcessId=%d" get WorkingSetSize' % os.getpid())
+        memory_usage = int(process.read().strip().split("\n")[-1]) / (1024 * 1024)
+        process.close()
+    else:
+        memory_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
+    embed = discord.Embed(title="📊 Bot Stats", color=discord.Color.green())
+    embed.add_field(name="⏳ Uptime", value=f"{int(uptime // 3600)}h {int((uptime % 3600) // 60)}m {int(uptime % 60)}s", inline=False)
+    embed.add_field(name="💾 Memory Usage", value=f"{memory_usage:.2f} MB", inline=False)
+    embed.add_field(name="🏠 Servers", value=f"{server_count} servers", inline=False)
+
+    await ctx.send(embed=embed)
+
+@bot.command(name="showstats")
+async def toggle_stats(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    stats_config["show_stats"] = not stats_config["show_stats"]
+    save_stats_config(stats_config)
+    
+    await update_bot_presence()
+    
+    state = "enabled" if stats_config["show_stats"] else "disabled"
+    await messagesender(bot, ctx.channel.id, content=f"Bot stats display has been {state}.")
+
+@bot.command(name="purgequeues")
+async def purge_queues(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    global server_queues
+    cleared_count = 0
+    
+    for guild_id in list(server_queues.keys()):
+        if isinstance(server_queues[guild_id], asyncio.Queue):
+            server_queues[guild_id] = asyncio.Queue()
+            cleared_count += 1
+    
+    await messagesender(bot, ctx.channel.id, content=f"Cleared queues for {cleared_count} servers.")
+
+@bot.command(name="sendglobalmsg")
+async def send_global_message(ctx, *, message: str):
+    if ctx.author.id != BOT_OWNER_ID:
+        await messagesender(bot, ctx.channel.id, content="You don't have permission to use this command.")
+        return
+    
+    success_count = 0
+    failure_count = 0
+    
+    for guild in bot.guilds:
+        target_channel = None
+        
+        # Check last active channel first
+        if guild.id in last_active_channels:
+            target_channel = bot.get_channel(last_active_channels[guild.id])
+        
+        # If no active channel, try #general or #voice
+        if not target_channel:
+            for channel in guild.text_channels:
+                if channel.name in ["general", "voice"] and channel.permissions_for(guild.me).send_messages:
+                    target_channel = channel
+                    break
+        
+        # If still no target, find the first text channel the bot can send messages in
+        if not target_channel:
+            for channel in guild.text_channels:
+                if channel.permissions_for(guild.me).send_messages:
+                    target_channel = channel
+                    break
+        
+        if target_channel:
+            try:
+                await target_channel.send(message)
+                success_count += 1
+            except Exception:
+                failure_count += 1
+        else:
+            failure_count += 1
+    
+    await messagesender(bot, ctx.channel.id, content=f"Message sent to {success_count} servers. Failed in {failure_count}.")
+
 async def get_youtube_video_title(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
-    
+
     try:
         api_url = f"https://api.song.link/v1-alpha.1/links?Country=US&songIfSingle=true&url={url}"
         headers = {
@@ -602,15 +2373,24 @@ async def get_youtube_video_title(video_id):
         logging.error(f"Error fetching video title from YouTube page: {e}")
         return None
 
+@bot.event
+async def on_message_delete(message):
+    if message.id in message_map:
+        try:
+            await message_map[message.id].delete()
+        except discord.NotFound:
+            pass
+        del message_map[message.id]
+
 async def get_youtube_playlist_title(playlist_id):
     url = f"https://www.youtube.com/playlist?list={playlist_id}"
-    
+
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, headers={"User-Agent": "Mozilla/5.0"}) as response:
                 response.raise_for_status()
                 html_content = await response.text()
-                
+
                 match = re.search(r'var ytInitialData = ({.*?});</script>', html_content, re.DOTALL)
                 if not match:
                     logging.error(f"Error: Could not find JSON metadata for {playlist_id}")
@@ -632,12 +2412,14 @@ async def get_youtube_playlist_title(playlist_id):
             logging.error(f"Error fetching playlist title: {e}")
             return "Unknown Playlist"
 
+
 async def timeout_handler(ctx):
-    await asyncio.sleep(TIMEOUT_TIME) 
+    await asyncio.sleep(TIMEOUT_TIME)
 
     if ctx.guild.id in bot.voice_clients and ctx.voice_client and ctx.voice_client.is_connected():
         await ctx.voice_client.disconnect()
-        logging.info(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
+        logging.error(f"Disconnected from voice channel due to inactivity in guild: {ctx.guild.name}")
+
 
 async def update_bot_presence():
     """ Updates the bot's presence based on the stats setting. """
@@ -647,363 +2429,126 @@ async def update_bot_presence():
     else:
         await bot.change_presence(activity=None)
 
-def get_current_elapsed_time(guild_id: int) -> int:
-    """
-    Returns the elapsed playback time (in seconds) for the current track in the guild.
-    """
-    track_state = current_tracks.get(guild_id, {})
-    start_time = track_state.get("start_time")
-    if start_time is None:
-        return 0
-    return int(time.time() - start_time)
 
-def retrieve_audio_file_for_current_track(guild_id: int) -> str:
-    """
-    Returns the stored audio file path for the current track in the guild.
-    """
-    track_state = current_tracks.get(guild_id, {})
-    return track_state.get("audio_file", None)
-
-async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None):
-    logging.info(f"Queueing video: {video_id} - {title}")
-    try:
-        if title is None:
-            video_title = await get_youtube_video_title(video_id)
-            if not video_title:
-                await messagesender(bot, ctx.channel.id, content="Failed to retrieve video title.")
-                return
-
-            metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
-            metadata_manager.save_metadata(video_id, metadata)
-        else:
-            video_title = title
-            metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
-            metadata_manager.save_metadata(video_id, metadata)
-            video_id = f"|{video_id}"
-
-        await server_queues[guild_id].put([video_id, video_title])
-        await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
-
-        if not ctx.voice_client:
-            if ctx.author.voice and ctx.author.voice.channel:
-                voice_client = await safe_voice_connect(bot, ctx.guild, ctx.author.voice.channel)
-                if not voice_client:
-                    await messagesender(bot, ctx.channel.id, content="Failed to connect to voice channel!")
-                    return
-            else:
-                await messagesender(bot, ctx.channel.id, content="You need to be in a voice channel for me to join!")
-                return
-
-        if not ctx.voice_client.is_playing():
-            asyncio.create_task(play_next(ctx, ctx.voice_client))
-
-    except Exception as e:
-        await messagesender(bot, ctx.channel.id, f"Error adding to queue: {e}")
-
-def add_track_to_history(guild_id, video_id, video_title):
-    if guild_id not in track_history:
-        track_history[guild_id] = []
-    track_history[guild_id].append((video_id, video_title))
-    if len(track_history[guild_id]) > 20:
-        track_history[guild_id].pop(0) 
-
-async def check_empty_channel(ctx):
-    """Check if voice channel is empty after 60 seconds"""
-    await asyncio.sleep(60)
-    guild_id = ctx.guild.id
-    
-    if ctx.voice_client and ctx.voice_client.is_connected():
-        # Don't disconnect if autoplay is enabled
-        if autoplay_enabled.get(guild_id, False):
-            return
-            
-        # Disconnect if only the bot is in the channel
-        if len(ctx.voice_client.channel.members) <= 1:
-            logging.info(f"Disconnecting from empty channel in {ctx.guild.name}")
-            await ctx.voice_client.disconnect()
-
-async def fetch_playlist_videos(ctx, playlist_id: str, playlist_url: str):
-    startermessage = f"Fetching playlist: ({playlist_id})\n"
-    progress_message = await ctx.send(startermessage)
-    bar_length = 20
-    update_interval = 10
-
-    async def update_progress(phase: str, progress: float):
-        filled_length = int(bar_length * progress)
-        bar = "█" * filled_length + "░" * (bar_length - filled_length)
-        await progress_message.edit(content=f"{startermessage}{phase}: [{bar}] {progress * 100:.1f}%")
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(playlist_url) as response:
-            total_size = response.content_length or 1
-            downloaded = 0
-            html_content = ""
-
-            chunk_size = max(1, total_size // update_interval)
-
-            async for chunk in response.content.iter_any():
-                html_content += chunk.decode()
-                downloaded += len(chunk)
-
-                progress = min(0.5 * (downloaded / total_size), 0.5)
-                if downloaded % chunk_size == 0:
-                    await update_progress("Downloading", progress)
-
-    await update_progress("Extracting", 0.5)
-
-    video_ids = re.findall(r'"videoId":"([\w-]{11})"', html_content)
-    total_videos = len(video_ids)
-
-    if total_videos == 0:
-        await progress_message.edit(content="No videos found in the playlist.")
-        return video_ids
-
-    for i, _ in enumerate(video_ids, 1):
-        progress = 0.5 + (i / total_videos) * 0.5
-        if i % max(1, total_videos // update_interval) == 0 or i == total_videos:
-            await update_progress("Extracting", progress)
-
-    await progress_message.edit(content=f"✅ Playlist processing complete! Found {total_videos} IDs.")
-    return video_ids
-
-async def play_next(ctx, voice_client):
-    """Improved play_next with better error handling and simplified logic"""
-    guild_id = ctx.guild.id
-    
-    # Don't proceed if intentionally disconnected
-    if bot.intentional_disconnections.get(guild_id, False):
-        logging.info(f"Skipping play_next - intentional disconnection for guild {guild_id}")
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
         return
-
-    logging.info(f"Playing next track for guild {guild_id}...")
-    
-    try:
-        while not queue_paused.get(guild_id, False):
-            # Check if queue is empty
-            if server_queues[guild_id].empty():
-                # Try autoplay if enabled
-                if autoplay_enabled.get(guild_id, False):
-                    last_track_id = None
-                    if track_history.get(guild_id):
-                        last_track_id = track_history[guild_id][-1][0]
-                    
-                    if last_track_id: 
-                        logging.info("Attempting autoplay...")
-                        next_video = await get_related_video(last_track_id, guild_id)
-                        if next_video:
-                            logging.info(f"Autoplaying: {next_video}")
-                            await queue_and_play_next(ctx, guild_id, next_video)
-                            return
-                        else:
-                            await messagesender(bot, ctx.channel.id, "Autoplay stopped: No new related videos found.")
-                
-                # Queue is empty and no autoplay
-                await messagesender(bot, ctx.channel.id, "The queue is empty.")
-                await check_empty_channel(ctx)
-                break
-
-            # Get next track from queue
-            try:
-                videoinfo = await server_queues[guild_id].get()
-                video_id, video_title = videoinfo[0], videoinfo[1]
-            except Exception as e:
-                logging.error(f"Error getting track from queue: {e}")
-                break
-
-            # Handle different audio sources
-            if video_id.startswith("|"):
-                audio_file = video_id[1:]  # Direct file path
-            else:
-                # Try preloaded audio first
-                if video_id in preload_tasks:
-                    try:
-                        audio_file = await preload_tasks.pop(video_id)
-                        if not audio_file:
-                            raise ValueError("Preloaded file is None")
-                    except Exception as e:
-                        logging.warning(f"Preload task for {video_id} failed: {e}")
-                        audio_file = await retry_download(video_id)
-                else:
-                    audio_file = await retry_download(video_id)
-
-                if not audio_file:
-                    await messagesender(bot, ctx.channel.id, f"Failed to download `{video_title}`. Skipping...")
-                    continue 
-
-            # Add to history and play
-            add_track_to_history(guild_id, video_id, video_title)
-            await play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id)
-            break
-            
-    except Exception as e:
-        logging.error(f"Error in play_next: {e}")
-    finally:
-        bot.intentional_disconnections[guild_id] = False
-
-async def play_audio_in_thread(voice_client, audio_file, ctx, video_title, video_id, start_offset: int = 0):
-    guild_id = ctx.guild.id
-
-    # Check if content is banned
-    if is_banned_title(video_title):
-        await messagesender(bot, ctx.channel.id, f"🚫 `{video_title}` is blocked and cannot be played.")
-        raise ValueError("Out of bounds error: This content is not allowed.")
-
-    logging.info(f"Playing: {video_title}")
-    
-    # Get or fetch metadata
-    metadata = metadata_manager.load_metadata(video_id)
-    if not metadata:
-        metadata = metadata_manager.get_or_fetch_metadata(video_id, video_title)
-        metadata_manager.save_metadata(video_id, metadata)
-
-    artist = metadata.get("artist", "Unknown Artist")
-    title = metadata.get("title", video_title)
-    duration = metadata.get("duration", "Unknown")
-
-    # Get album art
-    image_path = fetcher.get_album_art(video_title) or "/app/albumart/default.jpg"
-
-    # Create embed with track info
-    embed = discord.Embed(
-        title="Now Playing",
-        description=f"**{title}**",
-        color=discord.Color.blue()
-    )
-    
-    try:
-        file = discord.File(image_path, filename="album_art.jpg")
-        embed.set_thumbnail(url="attachment://album_art.jpg")
-    except Exception as e:
-        logging.warning(f"Could not attach album art: {e}")
-        file = None
-        
-    embed.add_field(name="Artist", value=artist, inline=True)
-    
-    # Format duration
-    try:
-        if duration != "Unknown" and duration:
-            duration_int = int(float(duration))
-            duration_str = f"{duration_int // 60}:{duration_int % 60:02d}"
-        else:
-            duration_str = "Unknown"
-    except (ValueError, TypeError):
-        duration_str = "Unknown"
-        
-    embed.add_field(name="Duration", value=duration_str, inline=True)
-    embed.set_footer(text=f"ID: {video_id}", icon_url="https://cdn.discordapp.com/avatars/1216449470149955684/137c7c7d86c6d383ae010ca347396b47.webp?size=240")
-
-    # Send now playing message
-    if file:
-        await messagesender(bot, ctx.channel.id, embed=embed, file=file)
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("You don't have permission to do that.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"Missing argument: {error.param.name}")
     else:
-        await messagesender(bot, ctx.channel.id, embed=embed)
+        await ctx.send(f"An error occurred: {error}")
+        raise error
 
-    # Update tracking data
-    current_tracks.setdefault(guild_id, {})["current_track"] = [video_id, video_title]
-    current_tracks[guild_id]["start_time"] = time.time() - start_offset
-    current_tracks[guild_id]["audio_file"] = audio_file
-    update_now_playing(guild_id, video_id, video_title, image_path)
 
-    # Verify audio file exists
-    if not audio_file or not os.path.exists(audio_file):
-        logging.error(f"Audio file not found: {audio_file}")
-        await messagesender(bot, ctx.channel.id, content="❌ Failed to play the track. Skipping...")
-        await play_next(ctx, voice_client)
+@bot.command(name="listen")
+async def listen_command(ctx):
+    await start_listening(ctx)
+
+
+@bot.command(name="unlisten")
+async def unlisten_command(ctx):
+    await stop_listening(ctx)
+
+
+@bot.command(name="getmetadata")
+async def get_metadata(ctx, filename: str):
+    metadata = metadata_manager.load_metadata(filename)
+    if metadata:
+        await ctx.send(f"Metadata for {filename}:\n```json\n{json.dumps(metadata, indent=4)}```")
+    else:
+        await ctx.send("No metadata found.")
+
+
+@bot.command(name="fetchmetadata")
+async def fetch_metadata(ctx, filename: str, query: str):
+    if ctx.author.id not in metadata_manager.editor_ids:
+        await ctx.send("You do not have permission to edit metadata.")
+        return
+    metadata = metadata_manager.get_or_fetch_metadata(filename, query)
+    await ctx.send(f"Fetched metadata:\n```json\n{json.dumps(metadata, indent=4)}```")
+
+
+@bot.command(name="setmetadata")
+async def set_metadata(ctx, filename: str, key: str, value: str):
+    if ctx.author.id not in metadata_manager.editor_ids:
+        await ctx.send("You do not have permission to edit metadata.")
+        return
+    metadata_manager.update_metadata(filename, key, value)
+    await ctx.send(f"Updated {key} in {filename}.")
+
+
+@bot.command(name="clean")
+async def clean_file(ctx, ID: str):
+    if ctx.author.id not in metadata_manager.editor_ids:
+        await ctx.send("❌ You do not have permission to clean this ID.")
         return
 
-    # Start playback
+    file_path = f"music/{ID}"
+    if not os.path.exists(file_path):
+        file_path = f"music/{ID}.mp3"
+    if not os.path.exists(file_path):
+        file_path = f"music/{ID}.opus"
+    if not os.path.exists(file_path):
+        await ctx.send(f"❌ File not found for ID: {ID}")
+        return
+
     try:
-        seek_option = f"-ss {start_offset}" if start_offset > 0 else ""
-        options = f"-bufsize 10m {seek_option}".strip()
-        
-        source = FFmpegPCMAudio(audio_file, executable="ffmpeg", options=options)
-        volume_level = guild_volumes.get(guild_id, 100) / 100
-        source = discord.PCMVolumeTransformer(source, volume=volume_level)
-        
-        voice_client.play(source, after=lambda e: logging.error(f"Playback error: {e}") if e else logging.info("Playback finished"))
-        
-        logging.info(f"Started playback: {title} by {artist}")
-        
+        os.remove(file_path)
+        await ctx.send(f"✅ Cleaned {ID} from database.")
     except Exception as e:
-        logging.error(f"Error starting playback: {e}")
-        await messagesender(bot, ctx.channel.id, content="❌ Failed to start playback. Skipping...")
-        await play_next(ctx, voice_client)
+        await ctx.send(f"❌ An error occurred while cleaing ID: {e}")
+
+
+@bot.command(name="addeditor")
+async def add_editor(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("You do not have permission to modify editors.")
+        return
+    metadata_manager.add_editor(user.id)
+    await ctx.send(f"Added {user.mention} as a metadata editor.")
+
+@bot.command(name="removeeditor")
+async def remove_editor(ctx, user: discord.User):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("You do not have permission to modify editors.")
+        return
+    metadata_manager.remove_editor(user.id)
+    await ctx.send(f"Removed {user.mention} from metadata editors.")
+
+@bot.command(name="updateyt")
+async def update_yt_dlp(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("You do not have permission to modify editors.")
         return
 
-    # Cancel existing timeout and set new one
-    if guild_id in bot.timeout_tasks:
-        bot.timeout_tasks[guild_id].cancel()
+    await messagesender(bot, ctx.channel.id, content="🔄 Updating pip and yt-dlp...")
+    try:
+        pip_proc = await asyncio.create_subprocess_exec(
+            "python3", "-m", "pip", "install", "--upgrade", "pip",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await pip_proc.communicate()
 
-    bot.timeout_tasks[guild_id] = asyncio.create_task(timeout_handler(ctx))
+        yt_proc = await asyncio.create_subprocess_exec(
+            "python3", "-m", "pip", "install", "--no-cache-dir", "--upgrade", "--force-reinstall", "yt-dlp",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await yt_proc.communicate()
 
-    # Pre-download next tracks
-    if not server_queues[guild_id].empty():
-        try:
-            temp_queue = list(server_queues[guild_id]._queue)
-            for next_video_id, next_video_title in temp_queue[:2]:  # Pre-download next 2 tracks
-                if next_video_id.startswith("|"):
-                    continue
-                if next_video_id not in preload_tasks:
-                    logging.info(f"Pre-downloading: {next_video_title}")
-                    preload_tasks[next_video_id] = asyncio.create_task(download_audio(next_video_id))
-        except Exception as e:
-            logging.error(f"Error pre-downloading tracks: {e}")
+        if yt_proc.returncode == 0:
+            output = stdout.decode().strip()
+            await messagesender(bot, ctx.channel.id, content=f"✅ yt-dlp updated:\n```\n{output}\n```")
+        else:
+            error = stderr.decode().strip()
+            await messagesender(bot, ctx.channel.id, content=f"❌ Update failed:\n```\n{error}\n```")
 
-    # Wait for playback to finish
-    while voice_client and voice_client.is_playing():
-        await asyncio.sleep(1)
-    
-    # Auto-play next track
-    if voice_client and voice_client.is_connected() and not bot.intentional_disconnections.get(guild_id, False):
-        await play_next(ctx, voice_client)
+    except Exception as e:
+        await messagesender(bot, ctx.channel.id, content=f"❌ Error: {str(e)}")
 
-# Load all cogs
-async def load_cogs():
-    """Load all cog files"""
-    cogs = [
-        Music(bot),
-        Queue(bot),
-        Voice(bot),
-        Config(bot),
-        Admin(bot),
-        Moderation(bot),
-        Info(bot),
-        LyricsCog(bot),
-        Metadata(bot),
-        Events(bot)
-    ]
-    
-    for cog in cogs:
-        try:
-            await bot.load_extension(cog)
-            logging.info(f"Loaded cog: {cog}")
-        except Exception as e:
-            logging.error(f"Failed to load cog {cog}: {e}")
 
-# Expose functions for cogs
-bot.download_audio = download_audio
-bot.retry_download = retry_download
-bot.get_related_video = get_related_video
-bot.is_banned_title = is_banned_title
-bot.run_blocking_in_executor = run_blocking_in_executor
-bot.get_youtube_video_title = get_youtube_video_title
-bot.get_youtube_playlist_title = get_youtube_playlist_title
-bot.timeout_handler = timeout_handler
-bot.update_bot_presence = update_bot_presence
-bot.get_current_elapsed_time = get_current_elapsed_time
-bot.retrieve_audio_file_for_current_track = retrieve_audio_file_for_current_track
-bot.queue_and_play_next = queue_and_play_next
-bot.add_track_to_history = add_track_to_history
-bot.check_empty_channel = check_empty_channel
-bot.fetch_playlist_videos = fetch_playlist_videos
-bot.play_next = play_next
-bot.play_audio_in_thread = play_audio_in_thread
-
-async def main():
-    async with bot:
-        await load_cogs()
-        await bot.start(BOT_TOKEN)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
+bot.run(BOT_TOKEN)

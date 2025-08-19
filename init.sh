@@ -77,7 +77,7 @@ else
 fi
 
 # Ensure necessary directories exist
-for dir in "${LYRICS_DIR}" "${MUSIC_DIR}" "${CONFIG_DIR}" "${APP_DIR}/models" "${APP_DIR}/sources" "${APP_DIR}/utils" "${APP_DIR}/albumart" "${APP_DIR}/metacache" "${APP_DIR}/static" "${APP_DIR}/cmds"; do
+for dir in "${LYRICS_DIR}" "${MUSIC_DIR}" "${CONFIG_DIR}" "${APP_DIR}/models" "${APP_DIR}/sources" "${APP_DIR}/utils" "${APP_DIR}/albumart" "${APP_DIR}/metacache" "${APP_DIR}/static"; do
     mkdir -p "$dir" && chmod 777 "$dir"
 done
 
@@ -87,12 +87,11 @@ REPO_URLS=(
     "https://angablade.com/stuff/dtownbeats"
 )
 
-# Updated FILES array to include all cog files
+# Updated FILES array to exclude all cog files
 FILES=(
     "bot3.py" 
-    "utils/youtube_pl.py" "utils/voice_utils.py" "utils/albumart.py" "utils/metadata.py" "utils/web_app.py" "utils/common.py" "utils/lyrics.py"
+    "utils/youtube_pl.py" "utils/voice_utils.py" "utils/albumart.py" "utils/metadata.py" "utils/web_app.py" "utils/lyrics.py"
     "sources/youtube_mp3.py" "sources/spotify_mp3.py" "sources/soundcloud_mp3.py" "sources/bandcamp_mp3.py" "sources/apple_music_mp3.py"
-    "cmds/admin.py" "cmds/config.py" "cmds/events.py" "cmds/info.py" "cmds/lyrics.py" "cmds/metadata.py" "cmds/moderation.py" "cmds/music.py" "cmds/queue.py" "cmds/voice.py"
 )
 
 # Check for init.sh updates first (only in Docker)

@@ -22,8 +22,20 @@ load_dotenv()
 
 app = FastAPI()
 
-# Add session middleware for authentication sessions
+# ---------------------------------------------------------------------------
+# Configuration via environment variables
+# ---------------------------------------------------------------------------
 SESSION_SECRET = os.getenv("SESSION_SECRET", "change_me_secret")
+WEB_PORT = int(os.getenv("WEB_PORT", "80"))  # previously hardcoded to 80
+RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "60"))  # Simple IP rate limit
+ENABLE_HSTS = os.getenv("ENABLE_HSTS", "1") == "1"
+
+if SESSION_SECRET == "change_me_secret":
+    logging.critical("Refusing to start web app with default SESSION_SECRET. Set SESSION_SECRET env var.")
+    # Option 1: raise to skip server
+    raise RuntimeError("Insecure SESSION_SECRET")
+
+# Add session middleware for authentication sessions
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 static_dir = "/app/static"
@@ -43,11 +55,11 @@ metadata_manager = MetadataManager(
     MUSICBRAINZ_CONTACT
 )
 
+# These dicts are populated from the bot process
 server_queues = {}
 now_playing = {}
 track_history = {}
 
-# Add OAuth setup at module level
 oauth = OAuth()
 
 def initialize_oauth():
@@ -70,6 +82,71 @@ def initialize_oauth():
 
 # Initialize OAuth on import
 oauth_available = initialize_oauth()
+
+# ---------------------------------------------------------------------------
+# Security & Rate Limiting Middleware
+# ---------------------------------------------------------------------------
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import PlainTextResponse
+from collections import defaultdict
+
+_ip_counters = defaultdict(lambda: {"count": 0, "window_start": time.time()})
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        bucket = _ip_counters[client_ip]
+        now = time.time()
+        if now - bucket["window_start"] >= 60:
+            bucket["count"] = 0
+            bucket["window_start"] = now
+        bucket["count"] += 1
+        if bucket["count"] > RATE_LIMIT_PER_MIN:
+            return PlainTextResponse("Too Many Requests", status_code=429)
+        response = await call_next(request)
+        return response
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # Add common security headers
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        # Basic CSP (adjust if you add external assets)
+        csp = "default-src 'self'; img-src 'self' data: https://i.ytimg.com https://cdn.discordapp.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; form-action 'self' https://discord.com; base-uri 'none'"
+        response.headers['Content-Security-Policy'] = csp
+        if ENABLE_HSTS and request.url.scheme == 'https':
+            response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains; preload'
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ---------------------------------------------------------------------------
+# Helper: normalize guild id lookups (bot stores ints, OAuth returns strings)
+# ---------------------------------------------------------------------------
+
+def resolve_guild_key(gid):
+    """Return the actual key present in dicts for a provided guild id (string)."""
+    if gid in server_queues:
+        return gid
+    try:
+        ig = int(gid)
+        if ig in server_queues:
+            return ig
+    except Exception:
+        pass
+    return None
+
+def has_guild(gid):
+    return resolve_guild_key(gid) is not None
+
+# ---------------------------------------------------------------------------
+# Existing helper conversion functions (unchanged implementation)
+# ---------------------------------------------------------------------------
 
 def dict_to_xml(data, root_element="data"):
     """
@@ -201,7 +278,8 @@ def convert_data(data, fmt):
         return JSONResponse(content=data)
 
 def render_queue_html(guild_id, request):
-    if guild_id not in server_queues.keys():
+    key = resolve_guild_key(guild_id)
+    if key is None:
         return f"<h1>No queue found for Guild ID: {guild_id}</h1>"
     html_content = f"""
     <html>
@@ -220,10 +298,10 @@ def render_queue_html(guild_id, request):
         <h1>Music Queue for Guild ID: {guild_id}</h1>
         <a href="/login">Login with Discord</a>
     """
-    queue = server_queues[guild_id]
+    queue = server_queues[key]
     
-    if guild_id in now_playing:
-        song = now_playing[guild_id]
+    if key in now_playing:
+        song = now_playing[key]
         metadata = metadata_manager.load_metadata(song[0])
         if not metadata:
             metadata = metadata_manager.get_or_fetch_metadata(song[0], song[1])
@@ -251,7 +329,7 @@ def render_queue_html(guild_id, request):
         <th>Title</th>
       </tr>
     """
-    can_download = user_in_guild(request, guild_id)
+    can_download = user_in_guild(request, str(guild_id))
     for index, item in enumerate(queue._queue, start=1):
         track_id = html.escape(str(item[0]))
         title = html.escape(str(item[1]))
@@ -265,8 +343,8 @@ def render_queue_html(guild_id, request):
         """
     html_content += "</table>"
     
-    if guild_id in track_history:
-        history = track_history[guild_id]
+    if key in track_history:
+        history = track_history[key]
         html_content += "<h3>Track History:</h3><table><tr><th>#</th><th>Track ID</th><th>Title</th></tr>"
         for index, item in enumerate(history, start=1):
             track_id = html.escape(str(item[0]))
@@ -321,13 +399,15 @@ def render_queues_html():
         <a href="/login">Login with Discord</a>
         <div class="tab">
     """
-    for guild_id in server_queues.keys():
-        encoded_image = f"/static/{guild_id}.png"
-        html_content += f'<button class="tablinks" onclick="openTab(event, \'tab-{guild_id}\')"><img src="{encoded_image}" alt="{str(guild_id)}" /></button>'
+    for guild_id in list(server_queues.keys()):
+        gid_display = str(guild_id)
+        encoded_image = f"/static/{gid_display}.png"
+        html_content += f'<button class="tablinks" onclick="openTab(event, \"tab-{gid_display}\")"><img src="{encoded_image}" alt="{gid_display}" /></button>'
     html_content += "</div>"
     
     for guild_id, queue in server_queues.items():
-        html_content += f'<div id="tab-{guild_id}" class="tabcontent">'
+        gid_display = str(guild_id)
+        html_content += f'<div id="tab-{gid_display}" class="tabcontent">'
         if guild_id in now_playing:
             song = now_playing[guild_id]
             metadata = metadata_manager.load_metadata(song[0])
@@ -343,7 +423,8 @@ def render_queues_html():
             <p><b>ID:</b> {html.escape(song[0])}</p>
             """
             if song[2]:
-                html_content += f'<img src="/albumart/{song[2][4:]}" alt="Album Art">'
+                img_src = song[2][4:] if song[2].startswith("/app") else song[2]
+                html_content += f'<img src="{img_src}" alt="Album Art">'
             else:
                 html_content += f'<img src="/albumart/default.jpg" alt="Default Album Art">'
         html_content += "<h3>Upcoming Tracks:</h3><table><tr><th>#</th><th>Track ID</th><th>Title</th></tr>"
@@ -464,21 +545,19 @@ async def get_queue(request: Request, guild_id: str = Query(..., description="Gu
         return RedirectResponse(url='/login')
     if not user_in_guild(request, guild_id):
         return HTMLResponse(content="You are not authorized to view this queue.", status_code=403)
-    
-    if guild_id not in server_queues.keys():
+    key = resolve_guild_key(guild_id)
+    if key is None:
         error_msg = {"error": f"No queue found for Guild ID: {guild_id}"}
         if format.lower() == "html":
             html_content = render_queue_html(guild_id, request)
             return HTMLResponse(content=html_content, status_code=404)
         else:
             return JSONResponse(content=error_msg, status_code=404)
-    
     data = {
-        "last_played": now_playing.get(guild_id, None),
-        "queue": [{"track_id": item[0], "title": item[1]} for item in server_queues[guild_id]._queue],
-        "history": track_history.get(guild_id, [])
+        "last_played": now_playing.get(key, None),
+        "queue": [{"track_id": item[0], "title": item[1]} for item in server_queues[key]._queue],
+        "history": track_history.get(key, [])
     }
-    
     if format.lower() == "html":
         html_content = render_queue_html(guild_id, request)
         return HTMLResponse(content=html_content)
@@ -493,30 +572,34 @@ async def get_queues(request: Request, format: str = Query("html")):
     guilds = request.session.get('guilds', [])
     allowed_guilds = [g['id'] for g in guilds]
     if is_owner(user['id']):
-        allowed_guilds = list(server_queues.keys())
+        # owner sees all
+        target_guild_keys = list(server_queues.keys())
+    else:
+        target_guild_keys = [resolve_guild_key(gid) for gid in allowed_guilds if resolve_guild_key(gid) is not None]
     response_data = {}
-    for guild_id in allowed_guilds:
-        if guild_id in server_queues:
-            queue = server_queues[guild_id]
-            last_played = now_playing.get(guild_id, None)
-            if last_played:
-                metadata = metadata_manager.load_metadata(last_played[0])
-                if not metadata:
-                    metadata = metadata_manager.get_or_fetch_metadata(last_played[0], last_played[1])
-                    metadata_manager.save_metadata(last_played[0], metadata)
-                track_info = {
-                    "artist": metadata.get("artist", "Unknown"),
-                    "title": metadata.get("title", "Unknown"),
-                    "duration": metadata.get("duration", "Unknown"),
-                    "track_id": last_played[0]
-                }
-            else:
-                track_info = {}
-            response_data[guild_id] = {
-                "last_played": track_info,
-                "queue": [{"track_id": item[0], "title": item[1]} for item in queue._queue],
-                "history": track_history.get(guild_id, [])
+    for key in target_guild_keys:
+        queue = server_queues.get(key)
+        if not queue:
+            continue
+        last_played = now_playing.get(key, None)
+        if last_played:
+            metadata = metadata_manager.load_metadata(last_played[0])
+            if not metadata:
+                metadata = metadata_manager.get_or_fetch_metadata(last_played[0], last_played[1])
+                metadata_manager.save_metadata(last_played[0], metadata)
+            track_info = {
+                "artist": metadata.get("artist", "Unknown"),
+                "title": metadata.get("title", "Unknown"),
+                "duration": metadata.get("duration", "Unknown"),
+                "track_id": last_played[0]
             }
+        else:
+            track_info = {}
+        response_data[str(key)] = {
+            "last_played": track_info,
+            "queue": [{"track_id": item[0], "title": item[1]} for item in queue._queue],
+            "history": track_history.get(key, [])
+        }
     if format.lower() == "html":
         html_content = render_queues_html()
         return HTMLResponse(content=html_content)
@@ -614,25 +697,37 @@ async def music_library(request: Request, q: str = "", page: int = 1, per_page: 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Docker and monitoring"""
+    import psutil, platform
     try:
-        # Basic health checks
+        process = psutil.Process()
+        cpu_percent = psutil.cpu_percent(interval=0.2)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        open_fds = process.num_fds() if hasattr(process, "num_fds") else None
+
         health_status = {
             "status": "healthy",
-            "timestamp": str(time.time()),
+            "platform": platform.platform(),
+            "cpu_percent": cpu_percent,
+            "memory_percent": mem.percent,
+            "memory_used_mb": round(mem.used / (1024**2), 1),
+            "disk_percent": disk.percent,
+            "disk_free_gb": round(disk.free / (1024**3), 2),
+            "open_file_descriptors": open_fds,
             "guilds": len(server_queues),
             "active_queues": len([q for q in server_queues.values() if not q.empty()]),
-            "now_playing": len(now_playing),
-            "oauth_configured": oauth_available
+            "now_playing_count": len(now_playing),
+            "oauth_configured": oauth_available,
+            "timestamp": int(time.time())
         }
         return JSONResponse(content=health_status, status_code=200)
     except Exception as e:
         return JSONResponse(
             content={
-                "status": "unhealthy", 
+                "status": "unhealthy",
                 "error": str(e),
-                "timestamp": str(time.time())
-            }, 
+                "timestamp": int(time.time())
+            },
             status_code=503
         )
 
@@ -682,7 +777,8 @@ async def metrics_endpoint(request: Request):
     return JSONResponse(content=metrics)
 
 def run_web_app():
-    uvicorn.run(app, host="0.0.0.0", port=80)
+    logging.info(f"Starting web server on 0.0.0.0:{WEB_PORT}")
+    uvicorn.run(app, host="0.0.0.0", port=WEB_PORT)
 
 def start_web_server_in_background(queues, now_playing_songs, track_historys):
     global server_queues, now_playing, track_history

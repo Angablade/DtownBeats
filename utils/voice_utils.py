@@ -18,16 +18,6 @@ SCORER_FILE = os.path.join(MODEL_DIR, "scorer.scorer")
 MODEL_URL = "https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite"
 SCORER_URL = "https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocabulary.scorer"
 
-def install_coqui_stt():
-    """Ensure Coqui STT is installed."""
-    try:
-        import stt  # noqa: F401
-        logging.error("✅ Coqui STT is installed.")
-    except ImportError:
-        logging.error("📥 Installing Coqui STT...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "coqui-stt"])
-        import stt  # noqa: F401
-
 def download_file(url, destination):
     """Download a file if it does not exist."""
     if not os.path.exists(destination):
@@ -35,19 +25,25 @@ def download_file(url, destination):
         urllib.request.urlretrieve(url, destination)
         logging.error(f"✅ Downloaded: {destination}")
 
+# Remove install_coqui_stt() call at import; wrap model load
+try:
+    import stt
+except ImportError:
+    stt = None
+    logging.warning("Coqui STT not installed. Voice control disabled.")
+
 def setup_models():
-    """Ensure model files exist."""
+    if stt is None:
+        return
     os.makedirs(MODEL_DIR, exist_ok=True)
     download_file(MODEL_URL, MODEL_FILE)
     download_file(SCORER_URL, SCORER_FILE)
 
-install_coqui_stt()
 setup_models()
 
-# Load STT model once (expensive)
 try:
-    STT_MODEL = stt.Model(MODEL_FILE)
-    if os.path.exists(SCORER_FILE):
+    STT_MODEL = stt.Model(MODEL_FILE) if stt and os.path.exists(MODEL_FILE) else None
+    if STT_MODEL and os.path.exists(SCORER_FILE):
         try:
             STT_MODEL.enableExternalScorer(SCORER_FILE)
         except Exception:
