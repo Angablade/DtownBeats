@@ -40,6 +40,7 @@ from discord.ui import View, Button
 from discord import FFmpegPCMAudio, Embed
 from discord.errors import ClientException
 from fuzzywuzzy import fuzz
+from typing import Optional
 
 #ENVIRONMENT VARIABLES
 MUSICBRAINZ_USERAGENT = os.getenv("MUSICBRAINZ_USERAGENT", "default_user")
@@ -306,7 +307,7 @@ async def check_perms(ctx, guild_id):
 
     return True
 
-async def ensure_audio_ready(video_id: str, *, max_retries: int = 2) -> str | None:
+async def ensure_audio_ready(video_id: str, *, max_retries: int = 2) -> Optional[str]:
     """
     Ensures an audio file for video_id exists and is complete.
     - Returns absolute path if ready, else None.
