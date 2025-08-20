@@ -277,7 +277,7 @@ async def download_audio(video_id):
         raise
 
 
-async def retry_download(video_id, retries=2):
+async def retry_download(video_id, retries=2, ctx=None, video_title=None):
     for attempt in range(retries):
         try:
             return await download_audio(video_id)
@@ -285,6 +285,8 @@ async def retry_download(video_id, retries=2):
             logging.warning(f"[{video_id}] Retry {attempt + 1} failed: {e}")
             await asyncio.sleep(1)
     logging.error(f"[{video_id}] All retries failed.")
+    if ctx and video_title:
+        await messagesender(bot, ctx.channel.id, content=f"❌ Failed to download '{video_title}'. Skipping.")
     return None
 
 async def check_perms(ctx, guild_id):
@@ -711,7 +713,7 @@ async def play_next(ctx, voice_client):
                         logging.warning(f"Preload task failed for {video_id}: {e}")
                         audio_file = None
                 else:
-                    audio_file = await retry_download(video_id)
+                    audio_file = await retry_download(video_id, ctx=ctx, video_title=video_title)
 
             if not audio_file:
                 await messagesender(bot, ctx.channel.id, f"Failed to load '{video_title}', skipping.")
@@ -1056,9 +1058,15 @@ async def youtube(ctx, *, search: str = None):
 async def handle_voice_connection(ctx):
     guild_id = ctx.guild.id
     voice_channel = ctx.author.voice.channel
-    if not ctx.voice_client:
-        bot.intentional_disconnections[guild_id] = False
-        await voice_channel.connect()
+    if ctx.voice_client:
+        try:
+            await ctx.voice_client.disconnect(force=True)
+        except Exception as e:
+            logging.error(f"Error disconnecting voice client: {e}")
+    bot.intentional_disconnections[guild_id] = False
+    voice_client = await safe_voice_connect(bot, ctx.guild, voice_channel)
+    if not voice_client or not voice_client.is_connected():
+        await messagesender(bot, ctx.channel.id, content="❌ Failed to join the voice channel. Try again or restart the bot.")
 
 async def fetch_video_id(ctx, search: str) -> str:
     if is_banned_title(search):
@@ -1252,11 +1260,18 @@ async def show_queue(ctx, page: int = 1):
 
         for index, item in enumerate(queue_slice, start=start_index + 1):
             try:
-                video_id = ''.join(item[:1])
-                video_title = ''.join(item[1:])
+                if isinstance(item, dict):
+                    video_id = item.get("video_id", "Unknown")
+                    video_title = item.get("title", "Unknown")
+                elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                    video_id = item[0]
+                    video_title = item[1]
+                else:
+                    video_id = "Unknown"
+                    video_title = str(item)
                 embed.add_field(name=f"{index}. {video_id}", value=video_title, inline=False)
             except Exception as e:
-                logging.error("Something was borked.")
+                logging.error(f"Queue display error: {e}")
         await messagesender(bot, ctx.channel.id, embed=embed)
 
 @bot.command(name="search", aliases=["find"])
