@@ -225,6 +225,7 @@ reconnect_cooldowns = {}
 FAILED_CONNECTS = {}  
 preload_tasks = {}
 reconnect_cooldowns = {}
+download_locks = {}
 
 guild_volumes = load_volume_settings()
 banned_users = load_banned_users()
@@ -232,9 +233,7 @@ stats_config = load_stats_config()
 blacklist_data = load_blacklist()
 debug_config = load_debug_mode()
 metadata_manager = MetadataManager("./metacache","./config/metadataeditors.json",MUSICBRAINZ_USERAGENT, MUSICBRAINZ_VERSION, MUSICBRAINZ_CONTACT)
-
-# ---- Enhancements / New Constants ----
-PRELOAD_LIMIT = 3  # limit number of tracks pre-fetched ahead
+PRELOAD_LIMIT = 3
 
 def parse_queue_item(item):
     """
@@ -278,16 +277,10 @@ async def download_audio(video_id):
 
 
 async def retry_download(video_id, retries=2, ctx=None, video_title=None):
-    for attempt in range(retries):
-        try:
-            return await download_audio(video_id)
-        except Exception as e:
-            logging.warning(f"[{video_id}] Retry {attempt + 1} failed: {e}")
-            await asyncio.sleep(1)
-    logging.error(f"[{video_id}] All retries failed.")
-    if ctx and video_title:
+    path = await ensure_audio_ready(video_id, max_retries=retries)
+    if not path and ctx and video_title:
         await messagesender(bot, ctx.channel.id, content=f"❌ Failed to download '{video_title}'. Skipping.")
-    return None
+    return path
 
 async def check_perms(ctx, guild_id):
     if ctx.author.id in banned_users:
@@ -312,6 +305,54 @@ async def check_perms(ctx, guild_id):
         return False
 
     return True
+
+async def ensure_audio_ready(video_id: str, *, max_retries: int = 2) -> str | None:
+    """
+    Ensures an audio file for video_id exists and is complete.
+    - Returns absolute path if ready, else None.
+    - Uses a per-video asyncio.Lock to prevent duplicate concurrent downloads.
+    """
+    if not video_id or ("/" in video_id or "\\" in video_id) and os.path.exists(video_id):
+        return video_id  # treat as already-local path
+    
+    candidates = [
+        f"music/{video_id}.mp3",
+        f"music/{video_id}.opus",
+        f"music/{video_id}.m4a",
+    ]
+    def _valid(path: str) -> bool:
+        return os.path.exists(path) and os.path.getsize(path) > 8 * 1024  # >8KB sanity
+    
+    for c in candidates:
+        if _valid(c):
+            return c
+    
+    lock = download_locks.get(video_id)
+    if not lock:
+        lock = asyncio.Lock()
+        download_locks[video_id] = lock
+    
+    async with lock:
+        for c in candidates:
+            if _valid(c):
+                return c
+        
+        attempt = 0
+        while attempt <= max_retries:
+            attempt += 1
+            try:
+                path = await download_audio(video_id)
+                if path and _valid(path):
+                    return path
+                for c in candidates:
+                    if _valid(c):
+                        return c
+                logging.warning(f"[{video_id}] Download attempt {attempt} produced no valid file.")
+            except Exception as e:
+                logging.error(f"[{video_id}] Download attempt {attempt} failed: {e}")
+            if attempt <= max_retries:
+                await asyncio.sleep(1)
+    return None
 
 
 @bot.event
@@ -708,10 +749,14 @@ async def play_next(ctx, voice_client):
                 if video_id in preload_tasks:
                     task = preload_tasks.pop(video_id)
                     try:
-                        audio_file = await task
+                        pre_path = await task
+                        if pre_path and os.path.exists(pre_path):
+                            audio_file = pre_path
+                        else:
+                            audio_file = await retry_download(video_id, ctx=ctx, video_title=video_title)
                     except Exception as e:
                         logging.warning(f"Preload task failed for {video_id}: {e}")
-                        audio_file = None
+                        audio_file = await retry_download(video_id, ctx=ctx, video_title=video_title)
                 else:
                     audio_file = await retry_download(video_id, ctx=ctx, video_title=video_title)
 
@@ -1057,16 +1102,25 @@ async def youtube(ctx, *, search: str = None):
 
 async def handle_voice_connection(ctx):
     guild_id = ctx.guild.id
-    voice_channel = ctx.author.voice.channel
-    if ctx.voice_client:
-        try:
-            await ctx.voice_client.disconnect(force=True)
-        except Exception as e:
-            logging.error(f"Error disconnecting voice client: {e}")
+    voice_channel = getattr(ctx.author.voice, "channel", None)
+    if not voice_channel:
+        await messagesender(bot, ctx.channel.id, "❌ You are not in a voice channel.")
+        return
     bot.intentional_disconnections[guild_id] = False
-    voice_client = await safe_voice_connect(bot, ctx.guild, voice_channel)
-    if not voice_client or not voice_client.is_connected():
-        await messagesender(bot, ctx.channel.id, content="❌ Failed to join the voice channel. Try again or restart the bot.")
+    if ctx.voice_client and ctx.voice_client.is_connected():
+        if ctx.voice_client.channel == voice_channel:
+            return
+        try:
+            await ctx.voice_client.move_to(voice_channel)
+            return
+        except Exception:
+            try:
+                await ctx.voice_client.disconnect(force=True)
+            except Exception:
+                pass
+    vc = await safe_voice_connect(bot, ctx.guild, voice_channel)
+    if not vc or not vc.is_connected():
+        await messagesender(bot, ctx.channel.id, content="❌ Failed to join the voice channel. Try again.")
 
 async def fetch_video_id(ctx, search: str) -> str:
     if is_banned_title(search):
@@ -1141,21 +1195,28 @@ async def queue_and_play_next(ctx, guild_id: int, video_id: str, title=None, loc
         else:
             video_title = title
 
-        # Uniform dict-based queue item
-        queue_item = {"video_id": video_id, "title": video_title}
-        if local_file_path:
-            queue_item["file_path"] = local_file_path
+        if not local_file_path:
+            # Check cache first (cheap) then download if needed
+            audio_file = await ensure_audio_ready(video_id, max_retries=2)
+            if not audio_file:
+                await messagesender(bot, ctx.channel.id, f"❌ Could not download '{video_title}'.")
+                return
+            queue_item = {"video_id": video_id, "title": video_title, "file_path": audio_file}
+        else:
+            queue_item = {"video_id": video_id, "title": video_title, "file_path": local_file_path}
+
         await server_queues[guild_id].put(queue_item)
         await messagesender(bot, ctx.channel.id, f"Queued: `{video_title}`")
 
-        if not ctx.voice_client:
+        # Only connect if absent (do not forcibly disconnect an existing healthy connection)
+        if not ctx.voice_client or not ctx.voice_client.is_connected():
             if ctx.author.voice and ctx.author.voice.channel:
-                await ctx.author.voice.channel.connect()
+                await handle_voice_connection(ctx)
             else:
                 await messagesender(bot, ctx.channel.id, "Join a voice channel first.")
                 return
 
-        if not ctx.voice_client.is_playing():
+        if not ctx.voice_client.is_playing() and not ctx.voice_client.is_paused():
             asyncio.create_task(play_next(ctx, ctx.voice_client))
 
     except Exception as e:
