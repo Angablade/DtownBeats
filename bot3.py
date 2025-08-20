@@ -1041,7 +1041,10 @@ async def play(ctx, *, srch: str):
             server_queues[guild_id] = asyncio.Queue()
             current_tracks[guild_id] = {"current_track": None, "is_looping": False}
 
-        await handle_voice_connection(ctx)
+        # Only proceed if connection is successful
+        connection_success = await handle_voice_connection(ctx)
+        if not connection_success:
+            return
 
         patterns = {
             "bandcamp": r"https?://.*bandcamp\.com/.*",
@@ -1106,22 +1109,45 @@ async def handle_voice_connection(ctx):
     voice_channel = getattr(ctx.author.voice, "channel", None)
     if not voice_channel:
         await messagesender(bot, ctx.channel.id, "❌ You are not in a voice channel.")
-        return
+        return False
+    
+    # Set flag to prevent intentional disconnects during connection
     bot.intentional_disconnections[guild_id] = False
+    
+    # Check if already connected to the correct channel
     if ctx.voice_client and ctx.voice_client.is_connected():
         if ctx.voice_client.channel == voice_channel:
-            return
+            return True
         try:
             await ctx.voice_client.move_to(voice_channel)
-            return
-        except Exception:
+            return True
+        except Exception as e:
+            logging.error(f"Move failed: {e}")
             try:
                 await ctx.voice_client.disconnect(force=True)
             except Exception:
                 pass
-    vc = await safe_voice_connect(bot, ctx.guild, voice_channel)
-    if not vc or not vc.is_connected():
-        await messagesender(bot, ctx.channel.id, content="❌ Failed to join the voice channel. Try again.")
+    
+    # Create a connection lock for this guild if it doesn't exist
+    if not hasattr(bot, 'connection_locks'):
+        bot.connection_locks = {}
+    if guild_id not in bot.connection_locks:
+        bot.connection_locks[guild_id] = asyncio.Lock()
+    
+    # Prevent multiple connection attempts with a lock
+    async with bot.connection_locks[guild_id]:
+        # Double-check if already connected after acquiring lock
+        if ctx.voice_client and ctx.voice_client.is_connected() and ctx.voice_client.channel == voice_channel:
+            return True
+            
+        vc = await safe_voice_connect(bot, ctx.guild, voice_channel)
+        if not vc or not vc.is_connected():
+            await messagesender(bot, ctx.channel.id, content="❌ Failed to join the voice channel. Try again.")
+            return False
+        
+        # Add a small delay to ensure connection is stable
+        await asyncio.sleep(1)
+        return True
 
 async def fetch_video_id(ctx, search: str) -> str:
     if is_banned_title(search):
@@ -2626,6 +2652,9 @@ async def update_yt_dlp(ctx):
 
     except Exception as e:
         await messagesender(bot, ctx.channel.id, content=f"❌ Error: {str(e)}")
+
+
+
 
 
 bot.run(BOT_TOKEN)
